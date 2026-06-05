@@ -36,7 +36,7 @@ async def call_webhook(charge: Charge):
     except Exception as e:
         logger.warning(f"Failed to call webhook for charge {charge.id}")
         logger.warning(charge.webhook)
-        logger.warning(e)
+        logger.exception(e)
         return {"webhook_success": False, "webhook_message": str(e)}
 
 
