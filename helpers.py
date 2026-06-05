@@ -1,3 +1,5 @@
+import traceback
+
 import httpx
 from lnbits.core.crud import get_standalone_payment
 from lnbits.settings import settings
@@ -36,7 +38,7 @@ async def call_webhook(charge: Charge):
     except Exception as e:
         logger.warning(f"Failed to call webhook for charge {charge.id}")
         logger.warning(charge.webhook)
-        logger.exception(e)
+        logger.warning(traceback.format_exc())
         return {"webhook_success": False, "webhook_message": str(e)}
 
 
