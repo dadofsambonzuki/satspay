@@ -1,3 +1,5 @@
+import traceback
+
 import httpx
 from lnbits.core.crud import get_standalone_payment
 from lnbits.settings import settings
@@ -9,10 +11,10 @@ from .models import Charge, OnchainBalance
 
 async def call_webhook(charge: Charge):
     try:
-        assert charge.webhook
+        assert charge.webhook, "charge has no webhook"
         settings = await get_or_create_satspay_settings()
         async with httpx.AsyncClient() as client:
-            # wordpress expect a GET request with json_encoded binary content
+            # wordpress expects a GET request with json-encoded binary content
             if settings.webhook_method == "GET":
                 r = await client.request(
                     method="GET",
@@ -26,20 +28,17 @@ async def call_webhook(charge: Charge):
                     json=charge.json(),
                     timeout=10,
                 )
-            if r.is_success:
-                logger.success(f"Webhook sent for charge {charge.id}")
-            else:
-                logger.warning(f"Failed to call webhook for charge {charge.id}")
-                logger.warning(charge.webhook)
-                logger.warning(r.text)
+            r.raise_for_status()
+            logger.success(f"Webhook sent for charge {charge.id}")
             return {
-                "webhook_success": r.is_success,
+                "webhook_success": True,
                 "webhook_message": r.reason_phrase,
                 "webhook_response": r.text,
             }
     except Exception as e:
         logger.warning(f"Failed to call webhook for charge {charge.id}")
-        logger.warning(e)
+        logger.warning(charge.webhook)
+        logger.warning(traceback.format_exc())
         return {"webhook_success": False, "webhook_message": str(e)}
 
 
