@@ -1,142 +1,14 @@
-const mapCharge = (obj, oldObj = {}) => {
-  let charge = {...oldObj, ...obj}
-  charge.displayUrl = ['/satspay/', obj.id].join('')
-  charge.expanded = oldObj.expanded || false
-  charge.extra =
-    charge.extra && typeof charge.extra == 'string'
-      ? JSON.parse(charge.extra)
-      : charge.extra
-  const now = new Date().getTime() / 1000
-  const then = new Date(charge.timestamp).getTime() / 1000
-  const chargeTimeSeconds = charge.time * 60
-  const secondsSinceCreated = chargeTimeSeconds - now + then
-  charge.timeSecondsLeft = chargeTimeSeconds - now + then
-  charge.timeLeft =
-    charge.timeSecondsLeft <= 0
-      ? '00:00:00'
-      : secondsToTime(charge.timeSecondsLeft)
-  charge.progress = progress(charge.time * 60, secondsSinceCreated)
-  return charge
-}
-
-const mapCSS = (obj, oldObj = {}) => {
-  return _.clone(obj)
-}
-
-const padString = num => num.toString().padStart(2, '0')
-
-const secondsToTime = seconds => {
-  const hours = Math.floor(seconds / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-  const secs = Math.floor(seconds % 60)
-  return `${padString(hours)}:${padString(minutes)}:${padString(secs)}`
-}
-
-const progress = (startSeconds, currentSeconds) => {
-  return 1 - (startSeconds - currentSeconds) / startSeconds
-}
-
-window.PageSatspay = {
-  template: '#page-satspay',
+window.app = Vue.createApp({
+  el: '#vue',
+  mixins: [window.windowMixin],
   computed: {
     endpoint() {
       return `/satspay/api/v1/settings?usr=${this.g.user.id}`
-    },
-    currencies() {
-      return [
-        'satoshis',
-        ...(this.g.allowedCurrencies || this.g.currencies || [])
-      ]
-    },
-    chargesColumns() {
-      return [
-        {
-          name: 'theId',
-          align: 'left',
-          label: this.$t('satspay.col_id'),
-          field: 'id'
-        },
-        {
-          name: 'name',
-          align: 'left',
-          label: this.$t('satspay.col_name'),
-          field: 'name'
-        },
-        {
-          name: 'timeLeft',
-          align: 'left',
-          label: this.$t('satspay.col_time_left'),
-          field: 'timeLeft'
-        },
-        {
-          name: 'time to pay',
-          align: 'left',
-          label: this.$t('satspay.col_time_to_pay'),
-          field: 'time'
-        },
-        {
-          name: 'amount',
-          align: 'left',
-          label: this.$t('satspay.col_amount'),
-          field: 'amount'
-        },
-        {
-          name: 'balance',
-          align: 'left',
-          label: this.$t('satspay.col_balance'),
-          field: 'balance'
-        },
-        {
-          name: 'pending',
-          align: 'left',
-          label: this.$t('satspay.col_pending'),
-          field: 'pending'
-        },
-        {
-          name: 'onchain address',
-          align: 'left',
-          label: this.$t('satspay.col_onchain_address'),
-          field: 'onchainaddress'
-        },
-        {
-          name: 'LNbits wallet',
-          align: 'left',
-          label: this.$t('satspay.col_lnbits_wallet'),
-          field: 'lnbitswallet'
-        },
-        {
-          name: 'Webhook link',
-          align: 'left',
-          label: this.$t('satspay.col_webhook'),
-          field: 'webhook'
-        },
-        {
-          name: 'Paid link',
-          align: 'left',
-          label: this.$t('satspay.col_paid_link'),
-          field: 'completelink'
-        }
-      ]
-    },
-    customCSSColumns() {
-      return [
-        {
-          name: 'title',
-          align: 'left',
-          label: this.$t('satspay.col_css_title'),
-          field: 'title'
-        },
-        {
-          name: 'css_id',
-          align: 'left',
-          label: this.$t('satspay.col_css_id'),
-          field: 'css_id'
-        }
-      ]
     }
   },
-  data() {
+  data: function () {
     return {
+      currencies: [],
       fiatRates: {},
       settings: [
         {
@@ -159,7 +31,8 @@ window.PageSatspay = {
         }
       ],
       filter: '',
-      network: 'Mainnet',
+      admin: admin,
+      network: network,
       balance: null,
       walletLinks: [],
       chargeLinks: [],
@@ -169,10 +42,96 @@ window.PageSatspay = {
       rescanning: false,
       showAdvanced: false,
       chargesTable: {
-        pagination: {rowsPerPage: 10}
+        columns: [
+          {
+            name: 'theId',
+            align: 'left',
+            label: 'ID',
+            field: 'id'
+          },
+          {
+            name: 'name',
+            align: 'left',
+            label: 'Name',
+            field: 'name'
+          },
+          {
+            name: 'timeLeft',
+            align: 'left',
+            label: 'Time left',
+            field: 'timeLeft'
+          },
+          {
+            name: 'time to pay',
+            align: 'left',
+            label: 'Time to Pay',
+            field: 'time'
+          },
+          {
+            name: 'amount',
+            align: 'left',
+            label: 'Amount to pay',
+            field: 'amount'
+          },
+          {
+            name: 'balance',
+            align: 'left',
+            label: 'Balance',
+            field: 'balance'
+          },
+          {
+            name: 'pending',
+            align: 'left',
+            label: 'Pending Balance',
+            field: 'pending'
+          },
+          {
+            name: 'onchain address',
+            align: 'left',
+            label: 'Onchain Address',
+            field: 'onchainaddress'
+          },
+          {
+            name: 'LNbits wallet',
+            align: 'left',
+            label: 'LNbits wallet',
+            field: 'lnbitswallet'
+          },
+          {
+            name: 'Webhook link',
+            align: 'left',
+            label: 'Webhook link',
+            field: 'webhook'
+          },
+          {
+            name: 'Paid link',
+            align: 'left',
+            label: 'Paid link',
+            field: 'completelink'
+          }
+        ],
+        pagination: {
+          rowsPerPage: 10
+        }
       },
       customCSSTable: {
-        pagination: {rowsPerPage: 10}
+        columns: [
+          {
+            name: 'title',
+            align: 'left',
+            label: 'Title',
+            field: 'title'
+          },
+          {
+            name: 'css_id',
+            align: 'left',
+            label: 'ID',
+            field: 'css_id'
+          }
+        ],
+        pagination: {
+          rowsPerPage: 10
+        }
       },
       formDialogCharge: {
         show: false,
@@ -191,18 +150,22 @@ window.PageSatspay = {
       },
       formDialogThemes: {
         show: false,
-        data: {custom_css: ''}
+        data: {
+          custom_css: ''
+        }
       },
       showWebhookResponse: false,
-      webhookResponse: ''
+      webhookResponse: '',
+      fiatConfigs: [],
+      savingFiat: false
     }
   },
   methods: {
-    cancelThemes() {
+    cancelThemes: function (data) {
       this.formDialogCharge.data.custom_css = ''
       this.formDialogThemes.show = false
     },
-    cancelCharge() {
+    cancelCharge: function (data) {
       this.formDialogCharge.data.description = ''
       this.formDialogCharge.data.onchain = false
       this.formDialogCharge.data.onchainwallet = ''
@@ -216,7 +179,7 @@ window.PageSatspay = {
       this.formDialogCharge.show = false
     },
 
-    async getWalletLinks() {
+    getWalletLinks: async function () {
       try {
         let {data} = await LNbits.api.request(
           'GET',
@@ -232,18 +195,18 @@ window.PageSatspay = {
         console.warn('WatchOnly extension not available, onchain payments disabled')
       }
     },
-    getOnchainWalletName(walletId) {
+    getOnchainWalletName: function (walletId) {
       const wallet = this.walletLinks.find(w => w.id === walletId)
       if (!wallet) return 'unknown'
       return wallet.label
     },
-    getLNbitsWalletName(walletId) {
+    getLNbitsWalletName: function (walletId) {
       const wallet = this.g.user.walletOptions.find(w => w.value === walletId)
       if (!wallet) return 'unknown'
       return wallet.label
     },
 
-    async getCharges() {
+    getCharges: async function () {
       try {
         const {data} = await LNbits.api.request(
           'GET',
@@ -260,7 +223,7 @@ window.PageSatspay = {
         LNbits.utils.notifyApiError(error)
       }
     },
-    async getThemes() {
+    getThemes: async function () {
       try {
         const {data} = await LNbits.api.request(
           'GET',
@@ -282,12 +245,12 @@ window.PageSatspay = {
       }
     },
 
-    sendFormDataThemes() {
+    sendFormDataThemes: function () {
       const wallet = this.g.user.wallets[0].adminkey
       const data = this.formDialogThemes.data
       this.createTheme(wallet, data)
     },
-    sendFormDataCharge() {
+    sendFormDataCharge: function () {
       this.formDialogCharge.data.custom_css =
         this.formDialogCharge.data.custom_css?.id
       const data = this.formDialogCharge.data
@@ -298,14 +261,14 @@ window.PageSatspay = {
       data.onchainwallet = data.onchain ? this.onchainwallet?.id : null
       this.createCharge(wallet, data)
     },
-    updateformDialog(themeId) {
+    updateformDialog: function (themeId) {
       const theme = _.findWhere(this.themeLinks, {css_id: themeId})
       this.formDialogThemes.data.css_id = theme.css_id
       this.formDialogThemes.data.title = theme.title
       this.formDialogThemes.data.custom_css = theme.custom_css
       this.formDialogThemes.show = true
     },
-    async createTheme(wallet, data) {
+    createTheme: async function (wallet, data) {
       try {
         if (data.css_id) {
           const resp = await LNbits.api.request(
@@ -314,10 +277,9 @@ window.PageSatspay = {
             wallet,
             data
           )
-          this.themeLinks = _.reject(
-            this.themeLinks,
-            obj => obj.css_id === data.css_id
-          )
+          this.themeLinks = _.reject(this.themeLinks, function (obj) {
+            return obj.css_id === data.css_id
+          })
           this.themeLinks.unshift(mapCSS(resp.data))
         } else {
           const resp = await LNbits.api.request(
@@ -329,15 +291,18 @@ window.PageSatspay = {
           this.themeLinks.unshift(mapCSS(resp.data))
         }
         this.formDialogThemes.show = false
-        this.formDialogThemes.data = {title: '', custom_css: ''}
+        this.formDialogThemes.data = {
+          title: '',
+          custom_css: ''
+        }
       } catch (error) {
         LNbits.utils.notifyApiError(error)
       }
     },
 
-    deleteTheme(themeId) {
+    deleteTheme: function (themeId) {
       LNbits.utils
-        .confirmDialog(this.$t('satspay.delete_theme_confirm'))
+        .confirmDialog('Are you sure you want to delete this theme?')
         .onOk(async () => {
           try {
             await LNbits.api.request(
@@ -345,16 +310,15 @@ window.PageSatspay = {
               `/satspay/api/v1/themes/${themeId}`,
               this.g.user.wallets[0].adminkey
             )
-            this.themeLinks = _.reject(
-              this.themeLinks,
-              obj => obj.css_id === themeId
-            )
+            this.themeLinks = _.reject(this.themeLinks, function (obj) {
+              return obj.css_id === themeId
+            })
           } catch (error) {
             LNbits.utils.notifyApiError(error)
           }
         })
     },
-    async createCharge(wallet, data) {
+    createCharge: async function (wallet, data) {
       try {
         const resp = await LNbits.api.request(
           'POST',
@@ -377,9 +341,9 @@ window.PageSatspay = {
         LNbits.utils.notifyApiError(error)
       }
     },
-    deleteChargeLink(chargeId) {
+    deleteChargeLink: function (chargeId) {
       LNbits.utils
-        .confirmDialog(this.$t('satspay.delete_charge_confirm'))
+        .confirmDialog('Are you sure you want to delete this pay link?')
         .onOk(async () => {
           try {
             await LNbits.api.request(
@@ -387,25 +351,26 @@ window.PageSatspay = {
               `/satspay/api/v1/charge/${chargeId}`,
               this.g.user.wallets[0].adminkey
             )
-            this.chargeLinks = _.reject(
-              this.chargeLinks,
-              obj => obj.id === chargeId
-            )
+
+            this.chargeLinks = _.reject(this.chargeLinks, function (obj) {
+              return obj.id === chargeId
+            })
           } catch (error) {
             LNbits.utils.notifyApiError(error)
           }
         })
     },
-    sendWebhook(chargeId) {
+    sendWebhook: function (chargeId) {
       LNbits.api
         .request(
           'GET',
           `/satspay/api/v1/charge/webhook/${chargeId}`,
           this.g.user.wallets[0].adminkey
         )
-        .then(() => {
+        .then(response => {
+          console.log(response)
           this.$q.notify({
-            message: this.$t('satspay.webhook_sent'),
+            message: 'Webhook sent',
             color: 'positive'
           })
         })
@@ -413,7 +378,7 @@ window.PageSatspay = {
           LNbits.utils.notifyApiError(err)
         })
     },
-    checkChargeBalance(chargeId) {
+    checkChargeBalance: function (chargeId) {
       LNbits.api
         .request(
           'PUT',
@@ -429,17 +394,18 @@ window.PageSatspay = {
           this.chargeLinks[index] = mapCharge(charge, this.chargeLinks[index])
           if (charge.paid) {
             this.$q.notify({
-              message: this.$t('satspay.charge_paid'),
+              message: 'Charge paid',
               color: 'positive'
             })
           } else {
             this.$q.notify({
-              message: this.$t('satspay.charge_pending'),
+              message: 'Charge still pending...',
               color: 'negative'
             })
           }
         })
         .catch(err => {
+          console.log(err)
           LNbits.utils.notifyApiError(err)
         })
     },
@@ -447,32 +413,80 @@ window.PageSatspay = {
       this.webhookResponse = webhookResponse
       this.showWebhookResponse = true
     },
-    exportchargeCSV() {
-      LNbits.utils.exportCSV(this.chargesColumns, this.chargeLinks, 'charges')
+    exportchargeCSV: function () {
+      LNbits.utils.exportCSV(
+        this.chargesTable.columns,
+        this.chargeLinks,
+        'charges'
+      )
     },
     updateFiatRate(currency) {
       LNbits.api
-        .request('GET', '/api/v1/rate/' + currency, null)
+        .request('GET', '/lnurlp/api/v1/rate/' + currency, null)
         .then(response => {
           let rates = _.clone(this.fiatRates)
           rates[currency] = response.data.rate
           this.fiatRates = rates
         })
         .catch(LNbits.utils.notifyApiError)
+    },
+    loadFiatConfigs: async function () {
+      try {
+        const {data} = await LNbits.api.request(
+          'GET',
+          '/satspay/api/v1/fiat/config',
+          this.g.user.wallets[0].adminkey
+        )
+        const existing = {}
+        for (const cfg of data) {
+          existing[cfg.provider] = cfg
+        }
+        const providers = ['stripe', 'paypal', 'square', 'revolut']
+        this.fiatConfigs = providers.map(p =>
+          existing[p] || {provider: p, enabled: false, api_key: '', api_secret: '', webhook_secret: ''}
+        )
+      } catch (error) {
+        LNbits.utils.notifyApiError(error)
+      }
+    },
+    saveFiatConfigs: async function () {
+      this.savingFiat = true
+      try {
+        const payload = {configs: this.fiatConfigs.map(cfg => ({
+          provider: cfg.provider,
+          enabled: cfg.enabled,
+          api_key: cfg.api_key || null,
+          api_secret: cfg.api_secret || null,
+          webhook_secret: cfg.webhook_secret || null
+        }))}
+        await LNbits.api.request(
+          'PUT',
+          '/satspay/api/v1/fiat/config',
+          this.g.user.wallets[0].adminkey,
+          payload
+        )
+        this.$q.notify({message: 'Fiat config saved', color: 'positive'})
+        await this.loadFiatConfigs()
+      } catch (error) {
+        LNbits.utils.notifyApiError(error)
+      } finally {
+        this.savingFiat = false
+      }
     }
   },
-  async created() {
-    try {
-      const {data} = await LNbits.api.request(
-        'GET',
-        '/satspay/api/v1/settings/public'
-      )
-      this.network = data.network
-    } catch (e) {}
-    if (this.g.user.admin) {
+  created: async function () {
+    if (this.admin == 'True') {
       await this.getThemes()
     }
     await this.getCharges()
     await this.getWalletLinks()
+    await this.loadFiatConfigs()
+    LNbits.api
+      .request('GET', '/api/v1/currencies')
+      .then(response => {
+        this.currencies = ['satoshis', ...response.data]
+        this.formDialogCharge.data.currency = 'satoshis'
+      })
+      .catch(LNbits.utils.notifyApiError)
   }
-}
+})
