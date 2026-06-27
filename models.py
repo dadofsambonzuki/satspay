@@ -13,6 +13,19 @@ class SatspaySettings(BaseModel):
     network: str = "Mainnet"
 
 
+class FiatConfig(BaseModel):
+    provider: str
+    enabled: bool = False
+    api_key: str | None = None
+    api_secret: str | None = None
+    webhook_secret: str | None = None
+    extra: str | None = None
+
+
+class FiatConfigsUpdate(BaseModel):
+    configs: list[FiatConfig]
+
+
 class CreateCharge(BaseModel):
     onchainwallet: str = Query(None)
     lnbitswallet: str = Query(None)
@@ -29,6 +42,8 @@ class CreateCharge(BaseModel):
     currency: str = Query(None)
     currency_amount: float | None = Query(None)
     extra: str | None = Query(None)
+    fiat_provider: str | None = Query(None)
+    fiat_currency: str | None = Query(None)
 
 
 class Charge(BaseModel):
@@ -56,6 +71,10 @@ class Charge(BaseModel):
     currency: str | None = None
     currency_amount: float | None = None
     extra: str | None = None
+    fiat_provider: str | None = None
+    fiat_currency: str | None = None
+    fiat_payment_request: str | None = None
+    fiat_checking_id: str | None = None
 
     def add_extra(self, extra: dict):
         old_extra = json.loads(self.extra) if self.extra else {}
@@ -87,6 +106,11 @@ class Charge(BaseModel):
             "custom_css",
             "paid",
             "completelinktext",
+            "currency",
+            "currency_amount",
+            "fiat_provider",
+            "fiat_currency",
+            "fiat_payment_request",
         ]
         c = {k: v for k, v in self.dict().items() if k in public_keys}
         c["paid"] = self.paid_fasttrack
