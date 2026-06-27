@@ -13,6 +13,10 @@ from .crud import get_or_create_satspay_settings
 from .models import Charge, CreateCharge, FiatConfig, OnchainBalance
 
 
+def _satspay_internal_host() -> str:
+    return "127.0.0.1" if settings.host in ("0.0.0.0", "::") else settings.host
+
+
 async def call_webhook(charge: Charge):
     try:
         assert charge.webhook, "charge has no webhook"
@@ -65,7 +69,7 @@ async def fetch_onchain_balance(onchain_address: str) -> OnchainBalance:
 async def fetch_onchain_config_network(api_key: str) -> str:
     async with httpx.AsyncClient() as client:
         r = await client.get(
-            url=f"http://{settings.host}:{settings.port}/watchonly/api/v1/config",
+            url=f"http://{_satspay_internal_host()}:{settings.port}/watchonly/api/v1/config",
             headers={"X-API-KEY": api_key},
         )
         r.raise_for_status()
@@ -76,7 +80,7 @@ async def fetch_onchain_config_network(api_key: str) -> str:
 async def fetch_onchain_address(wallet_id: str, api_key: str) -> str:
     async with httpx.AsyncClient() as client:
         r = await client.get(
-            url=f"http://{settings.host}:{settings.port}/watchonly/api/v1/address/{wallet_id}",
+            url=f"http://{_satspay_internal_host()}:{settings.port}/watchonly/api/v1/address/{wallet_id}",
             headers={"X-API-KEY": api_key},
         )
         r.raise_for_status()
