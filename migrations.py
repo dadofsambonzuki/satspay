@@ -244,3 +244,16 @@ async def m015_add_fiat_configs(db: Database):
         )
     except OperationalError:
         pass
+
+
+async def m016_add_fiat_payment_requests(db: Database):
+    """
+    Add fiat_payment_requests column for storing multiple fiat provider
+    payment requests per charge as JSON.
+    """
+    try:
+        await db.execute(
+            "ALTER TABLE satspay.charges ADD COLUMN fiat_payment_requests TEXT"
+        )
+    except OperationalError:
+        pass

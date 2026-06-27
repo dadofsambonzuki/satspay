@@ -1,3 +1,4 @@
+import json
 from http import HTTPStatus
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -48,10 +49,19 @@ async def _find_charge_by_fiat_checking_id(checking_id: str, provider: str) -> C
     return await db.fetchone(
         """
         SELECT * FROM satspay.charges
-        WHERE fiat_checking_id = :checking_id AND fiat_provider = :provider
-        AND paid = false
+        WHERE paid = false AND (
+            (fiat_checking_id = :checking_id AND fiat_provider = :provider)
+            OR (
+                fiat_payment_requests IS NOT NULL
+                AND json_extract(fiat_payment_requests, :json_path) = :checking_id
+            )
+        )
         """,
-        {"checking_id": checking_id, "provider": provider},
+        {
+            "checking_id": checking_id,
+            "provider": provider,
+            "json_path": f"$.{provider}.checking_id",
+        },
         Charge,
     )
 
@@ -98,10 +108,10 @@ async def api_fiat_webhook(provider: str, request: Request) -> dict:
     fiat_config = None
     charges = await get_charges("")
     for charge in charges:
-        if charge.fiat_provider == provider and not charge.paid:
-            if charge.user:
-                fiat_config = await get_fiat_config(charge.user, provider)
-            break
+        if not charge.paid and charge.user:
+            fiat_config = await get_fiat_config(charge.user, provider)
+            if fiat_config:
+                break
     if not fiat_config:
         logger.warning(f"No fiat config found for provider {provider}")
         return {"status": "ignored"}
@@ -111,14 +121,14 @@ async def api_fiat_webhook(provider: str, request: Request) -> dict:
         logger.warning(f"Fiat webhook verification failed: {e}")
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e)) from e
     if checking_id:
-        charge = await _find_charge_by_fiat_checking_id(checking_id, provider)
-        if charge and not charge.paid:
-            charge.balance = charge.amount
-            charge.paid = True
-            charge = await update_charge(charge)
-            await send_success_websocket(charge)
-            if charge.webhook:
-                await call_webhook(charge)
+        matching_charge = await _find_charge_by_fiat_checking_id(checking_id, provider)
+        if matching_charge and not matching_charge.paid:
+            matching_charge.balance = matching_charge.amount
+            matching_charge.paid = True
+            matching_charge = await update_charge(matching_charge)
+            await send_success_websocket(matching_charge)
+            if matching_charge.webhook:
+                await call_webhook(matching_charge)
     return {"status": "ok"}
 
 
@@ -129,9 +139,13 @@ async def api_charge_create(data: CreateCharge, key_type: WalletTypeInfo = Depen
     if data.currency and data.currency_amount:
         rate = await get_fiat_rate_satoshis(data.currency)
         data.amount = round(rate * data.currency_amount)
-    if not data.onchainwallet and not data.lnbitswallet and not data.fiat_provider:
-        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail="either onchainwallet, lnbitswallet, or fiat_provider are required.")
     user = key_type.wallet.user
+    fiat_configs = await get_fiat_configs(user)
+    enabled_fiat = [c for c in fiat_configs if c.enabled]
+    if data.fiat_provider:
+        enabled_fiat = [c for c in enabled_fiat if c.provider == data.fiat_provider]
+    if not data.onchainwallet and not data.lnbitswallet and not data.fiat_provider and not enabled_fiat:
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail="either onchainwallet, lnbitswallet, or fiat_provider are required.")
     if data.lnbitswallet:
         lnbitswallet = await get_wallet(data.lnbitswallet)
         if not lnbitswallet:
@@ -152,15 +166,23 @@ async def api_charge_create(data: CreateCharge, key_type: WalletTypeInfo = Depen
             raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail="Error fetching onchain address.") from exc
     else:
         charge = await create_charge(user=user, data=data)
-    if data.fiat_provider:
-        fiat_config = await get_fiat_config(user, data.fiat_provider)
-        if not fiat_config or not fiat_config.enabled:
-            raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=f"Fiat provider '{data.fiat_provider}' is not configured.")
-        fiat_result = await create_fiat_invoice_for_charge(charge, data, fiat_config)
-        if fiat_result:
-            charge.fiat_payment_request = fiat_result.get("payment_request")
-            charge.fiat_checking_id = fiat_result.get("checking_id")
-            charge = await update_charge(charge)
+
+    fiat_results = {}
+    for fiat_config in enabled_fiat:
+        try:
+            data.fiat_provider = fiat_config.provider
+            fiat_result = await create_fiat_invoice_for_charge(charge, data, fiat_config)
+            if fiat_result:
+                fiat_results[fiat_config.provider] = {
+                    "payment_request": fiat_result.get("payment_request"),
+                    "checking_id": fiat_result.get("checking_id"),
+                }
+        except Exception as exc:
+            logger.warning(f"Failed to create fiat invoice for {fiat_config.provider}: {exc}")
+
+    if fiat_results:
+        charge.fiat_payment_requests = json.dumps(fiat_results)
+        charge = await update_charge(charge)
     return charge
 
 
