@@ -229,7 +229,7 @@ window.PageSatspay = {
           label: w.title + ' - ' + w.id
         }))
       } catch (error) {
-        LNbits.utils.notifyApiError(error)
+        console.warn('WatchOnly extension not available, onchain payments disabled')
       }
     },
     getOnchainWalletName(walletId) {
