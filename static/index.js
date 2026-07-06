@@ -1,14 +1,56 @@
-window.app = Vue.createApp({
-  el: '#vue',
-  mixins: [window.windowMixin],
+const mapCharge = (obj, oldObj = {}) => {
+  let charge = {...oldObj, ...obj}
+  charge.displayUrl = ['/satspay/', obj.id].join('')
+  charge.expanded = oldObj.expanded || false
+  charge.extra =
+    charge.extra && typeof charge.extra == 'string'
+      ? JSON.parse(charge.extra)
+      : charge.extra
+  const now = new Date().getTime() / 1000
+  const then = new Date(charge.timestamp).getTime() / 1000
+  const chargeTimeSeconds = charge.time * 60
+  const secondsSinceCreated = chargeTimeSeconds - now + then
+  charge.timeSecondsLeft = chargeTimeSeconds - now + then
+  charge.timeLeft =
+    charge.timeSecondsLeft <= 0
+      ? '00:00:00'
+      : secondsToTime(charge.timeSecondsLeft)
+  charge.progress = progress(charge.time * 60, secondsSinceCreated)
+  return charge
+}
+
+const mapCSS = (obj, oldObj = {}) => {
+  return _.clone(obj)
+}
+
+const padString = num => num.toString().padStart(2, '0')
+
+const secondsToTime = seconds => {
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  const secs = Math.floor(seconds % 60)
+  return `${padString(hours)}:${padString(minutes)}:${padString(secs)}`
+}
+
+const progress = (startSeconds, currentSeconds) => {
+  return 1 - (startSeconds - currentSeconds) / startSeconds
+}
+
+window.PageSatspay = {
+  template: '#page-satspay',
   computed: {
     endpoint() {
       return `/satspay/api/v1/settings?usr=${this.g.user.id}`
+    },
+    currencies() {
+      return [
+        'satoshis',
+        ...(this.g.allowedCurrencies || this.g.currencies || [])
+      ]
     }
   },
-  data: function () {
+  data() {
     return {
-      currencies: [],
       fiatRates: {},
       settings: [
         {
@@ -31,8 +73,7 @@ window.app = Vue.createApp({
         }
       ],
       filter: '',
-      admin: admin,
-      network: network,
+      network: 'Mainnet',
       balance: null,
       walletLinks: [],
       chargeLinks: [],
@@ -43,18 +84,8 @@ window.app = Vue.createApp({
       showAdvanced: false,
       chargesTable: {
         columns: [
-          {
-            name: 'theId',
-            align: 'left',
-            label: 'ID',
-            field: 'id'
-          },
-          {
-            name: 'name',
-            align: 'left',
-            label: 'Name',
-            field: 'name'
-          },
+          {name: 'theId', align: 'left', label: 'ID', field: 'id'},
+          {name: 'name', align: 'left', label: 'Name', field: 'name'},
           {
             name: 'timeLeft',
             align: 'left',
@@ -73,12 +104,7 @@ window.app = Vue.createApp({
             label: 'Amount to pay',
             field: 'amount'
           },
-          {
-            name: 'balance',
-            align: 'left',
-            label: 'Balance',
-            field: 'balance'
-          },
+          {name: 'balance', align: 'left', label: 'Balance', field: 'balance'},
           {
             name: 'pending',
             align: 'left',
@@ -110,28 +136,14 @@ window.app = Vue.createApp({
             field: 'completelink'
           }
         ],
-        pagination: {
-          rowsPerPage: 10
-        }
+        pagination: {rowsPerPage: 10}
       },
       customCSSTable: {
         columns: [
-          {
-            name: 'title',
-            align: 'left',
-            label: 'Title',
-            field: 'title'
-          },
-          {
-            name: 'css_id',
-            align: 'left',
-            label: 'ID',
-            field: 'css_id'
-          }
+          {name: 'title', align: 'left', label: 'Title', field: 'title'},
+          {name: 'css_id', align: 'left', label: 'ID', field: 'css_id'}
         ],
-        pagination: {
-          rowsPerPage: 10
-        }
+        pagination: {rowsPerPage: 10}
       },
       formDialogCharge: {
         show: false,
@@ -150,20 +162,18 @@ window.app = Vue.createApp({
       },
       formDialogThemes: {
         show: false,
-        data: {
-          custom_css: ''
-        }
+        data: {custom_css: ''}
       },
       showWebhookResponse: false,
       webhookResponse: ''
     }
   },
   methods: {
-    cancelThemes: function (data) {
+    cancelThemes() {
       this.formDialogCharge.data.custom_css = ''
       this.formDialogThemes.show = false
     },
-    cancelCharge: function (data) {
+    cancelCharge() {
       this.formDialogCharge.data.description = ''
       this.formDialogCharge.data.onchain = false
       this.formDialogCharge.data.onchainwallet = ''
@@ -177,7 +187,7 @@ window.app = Vue.createApp({
       this.formDialogCharge.show = false
     },
 
-    getWalletLinks: async function () {
+    async getWalletLinks() {
       try {
         let {data} = await LNbits.api.request(
           'GET',
@@ -193,18 +203,18 @@ window.app = Vue.createApp({
         LNbits.utils.notifyApiError(error)
       }
     },
-    getOnchainWalletName: function (walletId) {
+    getOnchainWalletName(walletId) {
       const wallet = this.walletLinks.find(w => w.id === walletId)
       if (!wallet) return 'unknown'
       return wallet.label
     },
-    getLNbitsWalletName: function (walletId) {
+    getLNbitsWalletName(walletId) {
       const wallet = this.g.user.walletOptions.find(w => w.value === walletId)
       if (!wallet) return 'unknown'
       return wallet.label
     },
 
-    getCharges: async function () {
+    async getCharges() {
       try {
         const {data} = await LNbits.api.request(
           'GET',
@@ -221,7 +231,7 @@ window.app = Vue.createApp({
         LNbits.utils.notifyApiError(error)
       }
     },
-    getThemes: async function () {
+    async getThemes() {
       try {
         const {data} = await LNbits.api.request(
           'GET',
@@ -243,12 +253,12 @@ window.app = Vue.createApp({
       }
     },
 
-    sendFormDataThemes: function () {
+    sendFormDataThemes() {
       const wallet = this.g.user.wallets[0].adminkey
       const data = this.formDialogThemes.data
       this.createTheme(wallet, data)
     },
-    sendFormDataCharge: function () {
+    sendFormDataCharge() {
       this.formDialogCharge.data.custom_css =
         this.formDialogCharge.data.custom_css?.id
       const data = this.formDialogCharge.data
@@ -259,14 +269,14 @@ window.app = Vue.createApp({
       data.onchainwallet = data.onchain ? this.onchainwallet?.id : null
       this.createCharge(wallet, data)
     },
-    updateformDialog: function (themeId) {
+    updateformDialog(themeId) {
       const theme = _.findWhere(this.themeLinks, {css_id: themeId})
       this.formDialogThemes.data.css_id = theme.css_id
       this.formDialogThemes.data.title = theme.title
       this.formDialogThemes.data.custom_css = theme.custom_css
       this.formDialogThemes.show = true
     },
-    createTheme: async function (wallet, data) {
+    async createTheme(wallet, data) {
       try {
         if (data.css_id) {
           const resp = await LNbits.api.request(
@@ -275,9 +285,10 @@ window.app = Vue.createApp({
             wallet,
             data
           )
-          this.themeLinks = _.reject(this.themeLinks, function (obj) {
-            return obj.css_id === data.css_id
-          })
+          this.themeLinks = _.reject(
+            this.themeLinks,
+            obj => obj.css_id === data.css_id
+          )
           this.themeLinks.unshift(mapCSS(resp.data))
         } else {
           const resp = await LNbits.api.request(
@@ -289,16 +300,13 @@ window.app = Vue.createApp({
           this.themeLinks.unshift(mapCSS(resp.data))
         }
         this.formDialogThemes.show = false
-        this.formDialogThemes.data = {
-          title: '',
-          custom_css: ''
-        }
+        this.formDialogThemes.data = {title: '', custom_css: ''}
       } catch (error) {
         LNbits.utils.notifyApiError(error)
       }
     },
 
-    deleteTheme: function (themeId) {
+    deleteTheme(themeId) {
       LNbits.utils
         .confirmDialog('Are you sure you want to delete this theme?')
         .onOk(async () => {
@@ -308,15 +316,16 @@ window.app = Vue.createApp({
               `/satspay/api/v1/themes/${themeId}`,
               this.g.user.wallets[0].adminkey
             )
-            this.themeLinks = _.reject(this.themeLinks, function (obj) {
-              return obj.css_id === themeId
-            })
+            this.themeLinks = _.reject(
+              this.themeLinks,
+              obj => obj.css_id === themeId
+            )
           } catch (error) {
             LNbits.utils.notifyApiError(error)
           }
         })
     },
-    createCharge: async function (wallet, data) {
+    async createCharge(wallet, data) {
       try {
         const resp = await LNbits.api.request(
           'POST',
@@ -339,7 +348,7 @@ window.app = Vue.createApp({
         LNbits.utils.notifyApiError(error)
       }
     },
-    deleteChargeLink: function (chargeId) {
+    deleteChargeLink(chargeId) {
       LNbits.utils
         .confirmDialog('Are you sure you want to delete this pay link?')
         .onOk(async () => {
@@ -349,34 +358,30 @@ window.app = Vue.createApp({
               `/satspay/api/v1/charge/${chargeId}`,
               this.g.user.wallets[0].adminkey
             )
-
-            this.chargeLinks = _.reject(this.chargeLinks, function (obj) {
-              return obj.id === chargeId
-            })
+            this.chargeLinks = _.reject(
+              this.chargeLinks,
+              obj => obj.id === chargeId
+            )
           } catch (error) {
             LNbits.utils.notifyApiError(error)
           }
         })
     },
-    sendWebhook: function (chargeId) {
+    sendWebhook(chargeId) {
       LNbits.api
         .request(
           'GET',
           `/satspay/api/v1/charge/webhook/${chargeId}`,
           this.g.user.wallets[0].adminkey
         )
-        .then(response => {
-          console.log(response)
-          this.$q.notify({
-            message: 'Webhook sent',
-            color: 'positive'
-          })
+        .then(() => {
+          this.$q.notify({message: 'Webhook sent', color: 'positive'})
         })
         .catch(err => {
           LNbits.utils.notifyApiError(err)
         })
     },
-    checkChargeBalance: function (chargeId) {
+    checkChargeBalance(chargeId) {
       LNbits.api
         .request(
           'PUT',
@@ -391,10 +396,7 @@ window.app = Vue.createApp({
           const index = this.chargeLinks.findIndex(c => c.id === chargeId)
           this.chargeLinks[index] = mapCharge(charge, this.chargeLinks[index])
           if (charge.paid) {
-            this.$q.notify({
-              message: 'Charge paid',
-              color: 'positive'
-            })
+            this.$q.notify({message: 'Charge paid', color: 'positive'})
           } else {
             this.$q.notify({
               message: 'Charge still pending...',
@@ -403,7 +405,6 @@ window.app = Vue.createApp({
           }
         })
         .catch(err => {
-          console.log(err)
           LNbits.utils.notifyApiError(err)
         })
     },
@@ -411,7 +412,7 @@ window.app = Vue.createApp({
       this.webhookResponse = webhookResponse
       this.showWebhookResponse = true
     },
-    exportchargeCSV: function () {
+    exportchargeCSV() {
       LNbits.utils.exportCSV(
         this.chargesTable.columns,
         this.chargeLinks,
@@ -429,18 +430,18 @@ window.app = Vue.createApp({
         .catch(LNbits.utils.notifyApiError)
     }
   },
-  created: async function () {
-    if (this.admin == 'True') {
+  async created() {
+    try {
+      const {data} = await LNbits.api.request(
+        'GET',
+        '/satspay/api/v1/settings/public'
+      )
+      this.network = data.network
+    } catch (e) {}
+    if (this.g.user.admin) {
       await this.getThemes()
     }
     await this.getCharges()
     await this.getWalletLinks()
-    LNbits.api
-      .request('GET', '/api/v1/currencies')
-      .then(response => {
-        this.currencies = ['satoshis', ...response.data]
-        this.formDialogCharge.data.currency = 'satoshis'
-      })
-      .catch(LNbits.utils.notifyApiError)
   }
-})
+}
