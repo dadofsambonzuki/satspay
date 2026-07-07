@@ -3,7 +3,7 @@ window.app = Vue.createApp({
   mixins: [window.windowMixin],
   computed: {
     endpoint() {
-      return `/satspay/api/v1/settings?usr=${this.g.user.id}`
+      return '/satspay/api/v1/settings'
     },
     fiatEnabledProviders() {
       return this.fiatConfigs.filter(c => c.enabled).map(c => c.provider)
@@ -13,26 +13,30 @@ window.app = Vue.createApp({
     return {
       currencies: [],
       fiatRates: {},
-      settings: [
+      settingsOptions: [
         {
           type: 'str',
+          label: 'Network',
           description:
             'Network used by OnchainWallet extension Wallet. default: `Mainnet`, or `Testnet` for testnet',
           name: 'network'
         },
         {
           type: 'str',
+          label: 'Mempool URL',
           description:
             'Mempool API URL. default: `https://mempool.space`, use `https://mempool.space/testnet` for testnet',
           name: 'mempool_url'
         },
         {
           type: 'str',
+          label: 'Webhook Method',
           description:
             'Webhook Method with which the webhook is sent (GET is required for Woocommerce plugin). default: `GET`, or `POST`',
           name: 'webhook_method'
         }
       ],
+      settingsData: {},
       filter: '',
       admin: admin,
       network: network,
@@ -162,7 +166,8 @@ window.app = Vue.createApp({
       showWebhookResponse: false,
       webhookResponse: '',
       fiatConfigs: [],
-      savingFiat: false
+      savingFiat: false,
+      showSettings: false
     }
   },
   methods: {
@@ -459,6 +464,32 @@ window.app = Vue.createApp({
         LNbits.utils.notifyApiError(error)
       }
     },
+    loadSettings: async function () {
+      try {
+        const {data} = await LNbits.api.request(
+          'GET',
+          this.endpoint,
+          this.g.user.wallets[0].adminkey
+        )
+        this.settingsData = data
+      } catch (error) {
+        LNbits.utils.notifyApiError(error)
+      }
+    },
+    saveSettings: async function () {
+      try {
+        const {data} = await LNbits.api.request(
+          'PUT',
+          this.endpoint,
+          this.g.user.wallets[0].adminkey,
+          this.settingsData
+        )
+        this.settingsData = data
+        this.$q.notify({message: 'Settings saved', color: 'positive'})
+      } catch (error) {
+        LNbits.utils.notifyApiError(error)
+      }
+    },
     saveFiatConfigs: async function () {
       this.savingFiat = true
       try {
@@ -476,6 +507,7 @@ window.app = Vue.createApp({
           payload
         )
         this.$q.notify({message: 'Fiat config saved', color: 'positive'})
+        this.showSettings = false
         await this.loadFiatConfigs()
       } catch (error) {
         LNbits.utils.notifyApiError(error)
@@ -487,6 +519,7 @@ window.app = Vue.createApp({
   created: async function () {
     if (this.admin == 'True') {
       await this.getThemes()
+      await this.loadSettings()
     }
     await this.getCharges()
     await this.getWalletLinks()
