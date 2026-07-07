@@ -257,3 +257,21 @@ async def m016_add_fiat_payment_requests(db: Database):
         )
     except OperationalError:
         pass
+
+
+async def m017_add_fiat_config_fields(db: Database):
+    """
+    Add api_endpoint, api_version, location_id columns
+    to fiat_configs for structured provider settings.
+    """
+    for col in [
+        "api_endpoint TEXT",
+        "api_version TEXT",
+        "location_id TEXT",
+    ]:
+        try:
+            await db.execute(
+                f"ALTER TABLE satspay.fiat_configs ADD COLUMN {col}"
+            )
+        except OperationalError:
+            pass

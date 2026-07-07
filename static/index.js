@@ -11,7 +11,12 @@ window.app = Vue.createApp({
     canSaveFiatConfig() {
       return this.fiatConfigs
         .filter(c => c.enabled)
-        .every(c => c.api_key && c.api_secret && c.webhook_secret)
+        .every(c => {
+          if (!c.api_key) return false
+          if (c.provider === 'paypal' && !c.api_secret) return false
+          if (c.provider === 'square' && !c.location_id) return false
+          return true
+        })
     }
   },
   data: function () {
@@ -463,7 +468,7 @@ window.app = Vue.createApp({
         }
         const providers = ['stripe', 'paypal', 'square', 'revolut']
         this.fiatConfigs = providers.map(p =>
-          existing[p] || {provider: p, enabled: false, api_key: '', api_secret: '', webhook_secret: ''}
+          existing[p] || {provider: p, enabled: false, api_key: '', api_secret: '', webhook_secret: '', api_endpoint: '', api_version: '', location_id: ''}
         )
       } catch (error) {
         LNbits.utils.notifyApiError(error)
@@ -502,7 +507,10 @@ window.app = Vue.createApp({
           enabled: cfg.enabled,
           api_key: cfg.api_key || null,
           api_secret: cfg.api_secret || null,
-          webhook_secret: cfg.webhook_secret || null
+          webhook_secret: cfg.webhook_secret || null,
+          api_endpoint: cfg.api_endpoint || null,
+          api_version: cfg.api_version || null,
+          location_id: cfg.location_id || null
         }))}
         await LNbits.api.request(
           'PUT',

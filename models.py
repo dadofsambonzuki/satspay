@@ -20,6 +20,9 @@ class FiatConfig(BaseModel):
     api_key: str | None = None
     api_secret: str | None = None
     webhook_secret: str | None = None
+    api_endpoint: str | None = None
+    api_version: str | None = None
+    location_id: str | None = None
     extra: str | None = None
 
 

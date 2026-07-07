@@ -242,8 +242,7 @@ async def _create_stripe_checkout(amount: float, currency: str, payment_hash: st
 
 
 async def _create_paypal_checkout(amount: float, currency: str, payment_hash: str, config: FiatConfig) -> dict:
-    import json
-    endpoint = normalize_endpoint((json.loads(config.extra or "{}").get("endpoint") or "https://api-m.paypal.com"))
+    endpoint = normalize_endpoint(config.api_endpoint or "https://api-m.paypal.com")
     async with httpx.AsyncClient(base_url=endpoint) as client:
         r = await client.post("/v1/oauth2/token", data={"grant_type": "client_credentials"}, auth=(config.api_key or "", config.api_secret or ""), headers={"Accept": "application/json"})
         r.raise_for_status()
@@ -258,9 +257,9 @@ async def _create_paypal_checkout(amount: float, currency: str, payment_hash: st
 
 
 async def _create_revolut_checkout(amount: float, currency: str, payment_hash: str, config: FiatConfig) -> dict:
-    import json
-    endpoint = normalize_endpoint((json.loads(config.extra or "{}").get("endpoint") or "https://merchant.revolut.com"))
-    headers = {"Authorization": f"Bearer {config.api_key}", "Revolut-Api-Version": "2024-09-01", "Content-Type": "application/json", "User-Agent": settings.user_agent}
+    endpoint = normalize_endpoint(config.api_endpoint or "https://merchant.revolut.com")
+    api_version = config.api_version or "2026-04-20"
+    headers = {"Authorization": f"Bearer {config.api_key}", "Revolut-Api-Version": api_version, "Content-Type": "application/json", "User-Agent": settings.user_agent}
     checkout_data = {"amount": int(amount * 100), "currency": currency.upper(), "description": "SatsPay Payment", "merchant_order_ext_ref": payment_hash, "redirect_url": settings.revolut_payment_success_url or "https://lnbits.com"}
     async with httpx.AsyncClient(base_url=endpoint, headers=headers) as client:
         r = await client.post("/api/orders", json=checkout_data)
@@ -270,11 +269,9 @@ async def _create_revolut_checkout(amount: float, currency: str, payment_hash: s
 
 
 async def _create_square_checkout(amount: float, currency: str, payment_hash: str, config: FiatConfig) -> dict:
-    import json
-    extra = json.loads(config.extra or "{}")
-    endpoint = normalize_endpoint(extra.get("endpoint") or "https://connect.squareup.com")
-    version = extra.get("api_version") or "2024-09-19"
-    location_id = extra.get("location_id") or ""
+    endpoint = normalize_endpoint(config.api_endpoint or "https://connect.squareup.com")
+    version = config.api_version or "2026-01-22"
+    location_id = config.location_id or ""
     headers = {"Authorization": f"Bearer {config.api_key}", "Square-Version": version, "Content-Type": "application/json", "User-Agent": settings.user_agent}
     amount_cents = int(amount * 100)
     checkout_data = {"idempotency_key": uuid.uuid4().hex, "order": {"order": {"location_id": location_id, "line_items": [{"quantity": "1", "name": "SatsPay Payment", "base_price_money": {"amount": amount_cents, "currency": currency.upper()}}]}}, "redirect_url": settings.square_payment_success_url or "https://lnbits.com", "ask_for_shipping_address": False}
