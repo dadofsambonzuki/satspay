@@ -83,22 +83,21 @@ async def api_enabled() -> dict:
     return {"message": "SatsPay API enabled."}
 
 
-@satspay_api_router.get("/api/v1/fiat/providers", dependencies=[Depends(require_admin_key)])
+@satspay_api_router.get("/api/v1/fiat/providers")
 async def api_fiat_providers() -> list[str]:
     return ["stripe", "paypal", "square", "revolut"]
 
 
-@satspay_api_router.get("/api/v1/fiat/config", dependencies=[Depends(require_admin_key)])
-async def api_get_fiat_config(wallet: WalletTypeInfo = Depends(require_admin_key)) -> list[FiatConfig]:
+@satspay_api_router.get("/api/v1/fiat/config")
+async def api_get_fiat_config(wallet: WalletTypeInfo = Depends(require_invoice_key)) -> list[FiatConfig]:
     return await get_fiat_configs(wallet.wallet.user)
 
 
-@satspay_api_router.put("/api/v1/fiat/config", dependencies=[Depends(require_admin_key)])
-async def api_update_fiat_config(data: FiatConfigsUpdate, wallet: WalletTypeInfo = Depends(require_admin_key)) -> list[FiatConfig]:
-    user = wallet.wallet.user
+@satspay_api_router.put("/api/v1/fiat/config")
+async def api_update_fiat_config(data: FiatConfigsUpdate, wallet: WalletTypeInfo = Depends(require_invoice_key)) -> list[FiatConfig]:
     for config in data.configs:
-        await save_fiat_config(config, user)
-    return await get_fiat_configs(user)
+        await save_fiat_config(config, wallet.wallet.user)
+    return await get_fiat_configs(wallet.wallet.user)
 
 
 @satspay_api_router.post("/api/v1/fiat/webhook/{provider}")

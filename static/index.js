@@ -166,7 +166,7 @@ window.app = Vue.createApp({
       showWebhookResponse: false,
       webhookResponse: '',
       fiatConfigs: [],
-      savingFiat: false,
+      savingSettings: false,
       showSettings: false
     }
   },
@@ -450,7 +450,7 @@ window.app = Vue.createApp({
         const {data} = await LNbits.api.request(
           'GET',
           '/satspay/api/v1/fiat/config',
-          this.g.user.wallets[0].adminkey
+          this.g.user.wallets[0].inkey
         )
         const existing = {}
         for (const cfg of data) {
@@ -476,23 +476,22 @@ window.app = Vue.createApp({
         LNbits.utils.notifyApiError(error)
       }
     },
-    saveSettings: async function () {
+    saveAllSettings: async function () {
+      this.savingSettings = true
       try {
-        const {data} = await LNbits.api.request(
-          'PUT',
-          this.endpoint,
-          this.g.user.wallets[0].adminkey,
-          this.settingsData
-        )
-        this.settingsData = data
-        this.$q.notify({message: 'Settings saved', color: 'positive'})
-      } catch (error) {
-        LNbits.utils.notifyApiError(error)
-      }
-    },
-    saveFiatConfigs: async function () {
-      this.savingFiat = true
-      try {
+        if (this.g.user.admin) {
+          try {
+            const {data} = await LNbits.api.request(
+              'PUT',
+              this.endpoint,
+              this.g.user.wallets[0].adminkey,
+              this.settingsData
+            )
+            this.settingsData = data
+          } catch (error) {
+            LNbits.utils.notifyApiError(error)
+          }
+        }
         const payload = {configs: this.fiatConfigs.map(cfg => ({
           provider: cfg.provider,
           enabled: cfg.enabled,
@@ -506,13 +505,16 @@ window.app = Vue.createApp({
           this.g.user.wallets[0].adminkey,
           payload
         )
-        this.$q.notify({message: 'Fiat config saved', color: 'positive'})
+        this.$q.notify({message: 'Settings saved', color: 'positive'})
         this.showSettings = false
         await this.loadFiatConfigs()
+        if (this.g.user.admin) {
+          await this.loadSettings()
+        }
       } catch (error) {
         LNbits.utils.notifyApiError(error)
       } finally {
-        this.savingFiat = false
+        this.savingSettings = false
       }
     }
   },

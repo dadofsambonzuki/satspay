@@ -14,6 +14,7 @@ class SatspaySettings(BaseModel):
 
 
 class FiatConfig(BaseModel):
+    user: str = ""
     provider: str
     enabled: bool = False
     api_key: str | None = None

@@ -201,16 +201,14 @@ async def get_fiat_config(user: str, provider: str) -> FiatConfig | None:
 
 
 async def save_fiat_config(config: FiatConfig, user: str) -> FiatConfig:
+    config.user = user
     existing = await get_fiat_config(user, config.provider)
     if existing:
         await db.update(
             "satspay.fiat_configs",
             config,
-            '"user" = :user AND provider = :provider',
-            {"user": user, "provider": config.provider},
+            'WHERE "user" = :user AND provider = :provider',
         )
     else:
-        config_data = config.dict()
-        config_data["user"] = user
-        await db.insert("satspay.fiat_configs", config_data)
+        await db.insert("satspay.fiat_configs", config)
     return config
