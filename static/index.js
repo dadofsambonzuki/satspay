@@ -7,6 +7,11 @@ window.app = Vue.createApp({
     },
     fiatEnabledProviders() {
       return this.fiatConfigs.filter(c => c.enabled).map(c => c.provider)
+    },
+    canSaveFiatConfig() {
+      return this.fiatConfigs
+        .filter(c => c.enabled)
+        .every(c => c.api_key && c.api_secret && c.webhook_secret)
     }
   },
   data: function () {
