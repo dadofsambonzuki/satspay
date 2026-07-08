@@ -10,7 +10,7 @@ from lnbits.settings import settings
 from loguru import logger
 
 from .crud import get_or_create_satspay_settings
-from .models import Charge, CreateCharge, FiatConfig, OnchainBalance
+from .models import Charge, CreateCharge, OnchainBalance
 
 
 def _satspay_internal_host() -> str:
@@ -156,44 +156,42 @@ def get_txids(address: str, data) -> list[str]:
 
 
 async def create_fiat_invoice_for_charge(
-    charge: Charge, data: CreateCharge, fiat_config: FiatConfig
+    charge: Charge, data: CreateCharge, provider: str
 ) -> dict | None:
-    if not fiat_config or not fiat_config.enabled:
-        return None
-    if not fiat_config.api_key:
-        logger.warning(f"Fiat provider '{fiat_config.provider}' missing api_key")
-        return None
-
     payment_hash = uuid.uuid4().hex
     fiat_currency = data.fiat_currency or data.currency or "usd"
     fiat_amount = data.currency_amount or 0.0
 
     try:
-        if fiat_config.provider == "stripe":
-            result = await _create_stripe_checkout(fiat_amount, fiat_currency, payment_hash, fiat_config)
-        elif fiat_config.provider == "paypal":
-            result = await _create_paypal_checkout(fiat_amount, fiat_currency, payment_hash, fiat_config)
-        elif fiat_config.provider == "revolut":
-            result = await _create_revolut_checkout(fiat_amount, fiat_currency, payment_hash, fiat_config)
-        elif fiat_config.provider == "square":
-            result = await _create_square_checkout(fiat_amount, fiat_currency, payment_hash, fiat_config)
+        if provider == "stripe":
+            result = await _create_stripe_checkout(fiat_amount, fiat_currency, payment_hash)
+        elif provider == "paypal":
+            result = await _create_paypal_checkout(fiat_amount, fiat_currency, payment_hash)
+        elif provider == "revolut":
+            result = await _create_revolut_checkout(fiat_amount, fiat_currency, payment_hash)
+        elif provider == "square":
+            result = await _create_square_checkout(fiat_amount, fiat_currency, payment_hash)
         else:
             return None
         return result
     except Exception as exc:
-        logger.warning(f"Error creating fiat invoice: {exc}")
+        logger.warning(f"Error creating fiat invoice for {provider}: {exc}")
         return None
 
 
 async def verify_fiat_webhook(
-    provider: str, payload: bytes, signature: str | None, fiat_config: FiatConfig
+    provider: str, payload: bytes, signature: str | None
 ) -> str | None:
     if not signature:
         raise ValueError(f"Missing webhook signature for {provider}")
-    if provider == "stripe" and fiat_config.webhook_secret:
-        return _verify_stripe_webhook(payload, signature, fiat_config.webhook_secret)
-    if provider == "revolut" and fiat_config.webhook_secret:
-        return _verify_revolut_webhook(payload, signature, fiat_config.webhook_secret)
+    if provider == "stripe":
+        secret = settings.stripe_webhook_signing_secret
+        if secret:
+            return _verify_stripe_webhook(payload, signature, secret)
+    if provider == "revolut":
+        secret = settings.revolut_webhook_signing_secret
+        if secret:
+            return _verify_revolut_webhook(payload, signature, secret)
     raise ValueError(f"Webhook verification not supported for {provider}")
 
 
@@ -227,24 +225,33 @@ def _verify_revolut_webhook(payload: bytes, signature: str, secret: str) -> str 
         raise ValueError(f"Revolut webhook verification failed: {e}") from e
 
 
-async def _create_stripe_checkout(amount: float, currency: str, payment_hash: str, config: FiatConfig) -> dict:
+async def _create_stripe_checkout(amount: float, currency: str, payment_hash: str) -> dict:
     from urllib.parse import urlencode
-    endpoint = "https://api.stripe.com"
-    headers = {"Authorization": f"Bearer {config.api_key}", "Content-Type": "application/x-www-form-urlencoded", "User-Agent": settings.user_agent}
+    api_key = settings.stripe_api_secret_key
+    if not api_key:
+        raise ValueError("Stripe API secret key not configured in LNbits core settings")
+    endpoint = settings.stripe_api_endpoint or "https://api.stripe.com"
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/x-www-form-urlencoded", "User-Agent": settings.user_agent}
     amount_cents = int(amount * 100)
     success_url = settings.stripe_payment_success_url or "https://lnbits.com"
     form_data = {"mode": "payment", "success_url": success_url, "metadata[payment_hash]": payment_hash, "metadata[source]": "satspay", "line_items[0][price_data][currency]": currency.lower(), "line_items[0][price_data][product_data][name]": "SatsPay Payment", "line_items[0][price_data][unit_amount]": str(amount_cents), "line_items[0][quantity]": "1"}
     async with httpx.AsyncClient(base_url=endpoint, headers=headers) as client:
         r = await client.post("/v1/checkout/sessions", content=urlencode(form_data))
+        if r.status_code >= 400:
+            logger.warning(f"Stripe error {r.status_code}: {r.text}")
         r.raise_for_status()
         data = r.json()
         return {"payment_request": data.get("url"), "checking_id": data.get("id")}
 
 
-async def _create_paypal_checkout(amount: float, currency: str, payment_hash: str, config: FiatConfig) -> dict:
-    endpoint = normalize_endpoint(config.api_endpoint or "https://api-m.paypal.com")
+async def _create_paypal_checkout(amount: float, currency: str, payment_hash: str) -> dict:
+    client_id = settings.paypal_client_id
+    client_secret = settings.paypal_client_secret
+    if not client_id or not client_secret:
+        raise ValueError("PayPal client ID and secret must be configured in LNbits core settings")
+    endpoint = normalize_endpoint(settings.paypal_api_endpoint or "https://api-m.paypal.com")
     async with httpx.AsyncClient(base_url=endpoint) as client:
-        r = await client.post("/v1/oauth2/token", data={"grant_type": "client_credentials"}, auth=(config.api_key or "", config.api_secret or ""), headers={"Accept": "application/json"})
+        r = await client.post("/v1/oauth2/token", data={"grant_type": "client_credentials"}, auth=(client_id, client_secret), headers={"Accept": "application/json"})
         r.raise_for_status()
         token = r.json()["access_token"]
         headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
@@ -256,10 +263,13 @@ async def _create_paypal_checkout(amount: float, currency: str, payment_hash: st
         return {"payment_request": payment_url, "checking_id": data.get("id")}
 
 
-async def _create_revolut_checkout(amount: float, currency: str, payment_hash: str, config: FiatConfig) -> dict:
-    endpoint = normalize_endpoint(config.api_endpoint or "https://merchant.revolut.com")
-    api_version = config.api_version or "2026-04-20"
-    headers = {"Authorization": f"Bearer {config.api_key}", "Revolut-Api-Version": api_version, "Content-Type": "application/json", "User-Agent": settings.user_agent}
+async def _create_revolut_checkout(amount: float, currency: str, payment_hash: str) -> dict:
+    api_key = settings.revolut_api_secret_key
+    if not api_key:
+        raise ValueError("Revolut API secret key not configured in LNbits core settings")
+    endpoint = normalize_endpoint(settings.revolut_api_endpoint or "https://merchant.revolut.com")
+    api_version = settings.revolut_api_version or "2026-04-20"
+    headers = {"Authorization": f"Bearer {api_key}", "Revolut-Api-Version": api_version, "Content-Type": "application/json", "User-Agent": settings.user_agent}
     checkout_data = {"amount": int(amount * 100), "currency": currency.upper(), "description": "SatsPay Payment", "merchant_order_ext_ref": payment_hash, "redirect_url": settings.revolut_payment_success_url or "https://lnbits.com"}
     async with httpx.AsyncClient(base_url=endpoint, headers=headers) as client:
         r = await client.post("/api/orders", json=checkout_data)
@@ -268,11 +278,14 @@ async def _create_revolut_checkout(amount: float, currency: str, payment_hash: s
         return {"payment_request": data.get("checkout_url"), "checking_id": data.get("id")}
 
 
-async def _create_square_checkout(amount: float, currency: str, payment_hash: str, config: FiatConfig) -> dict:
-    endpoint = normalize_endpoint(config.api_endpoint or "https://connect.squareup.com")
-    version = config.api_version or "2026-01-22"
-    location_id = config.location_id or ""
-    headers = {"Authorization": f"Bearer {config.api_key}", "Square-Version": version, "Content-Type": "application/json", "User-Agent": settings.user_agent}
+async def _create_square_checkout(amount: float, currency: str, payment_hash: str) -> dict:
+    access_token = settings.square_access_token
+    location_id = settings.square_location_id
+    if not access_token or not location_id:
+        raise ValueError("Square access token and location ID must be configured in LNbits core settings")
+    endpoint = normalize_endpoint(settings.square_api_endpoint or "https://connect.squareup.com")
+    version = settings.square_api_version or "2026-01-22"
+    headers = {"Authorization": f"Bearer {access_token}", "Square-Version": version, "Content-Type": "application/json", "User-Agent": settings.user_agent}
     amount_cents = int(amount * 100)
     checkout_data = {"idempotency_key": uuid.uuid4().hex, "order": {"order": {"location_id": location_id, "line_items": [{"quantity": "1", "name": "SatsPay Payment", "base_price_money": {"amount": amount_cents, "currency": currency.upper()}}]}}, "redirect_url": settings.square_payment_success_url or "https://lnbits.com", "ask_for_shipping_address": False}
     async with httpx.AsyncClient(base_url=endpoint, headers=headers) as client:

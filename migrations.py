@@ -196,27 +196,10 @@ async def m014_fasttrack_to_charge(db: Database):
         pass
 
 
-async def m015_add_fiat_configs(db: Database):
+async def m015_add_fiat_charge_columns(db: Database):
     """
-    Add fiat_configs table for per-user fiat provider configuration
-    and fiat columns on charges.
+    Add fiat-related columns to charges.
     """
-    try:
-        await db.execute("""
-            CREATE TABLE satspay.fiat_configs (
-                "user" TEXT NOT NULL,
-                provider TEXT NOT NULL,
-                enabled BOOLEAN DEFAULT FALSE,
-                api_key TEXT,
-                api_secret TEXT,
-                webhook_secret TEXT,
-                extra TEXT,
-                PRIMARY KEY ("user", provider)
-            )
-        """)
-    except OperationalError:
-        pass
-
     try:
         await db.execute(
             "ALTER TABLE satspay.charges ADD COLUMN fiat_provider TEXT"
@@ -257,21 +240,3 @@ async def m016_add_fiat_payment_requests(db: Database):
         )
     except OperationalError:
         pass
-
-
-async def m017_add_fiat_config_fields(db: Database):
-    """
-    Add api_endpoint, api_version, location_id columns
-    to fiat_configs for structured provider settings.
-    """
-    for col in [
-        "api_endpoint TEXT",
-        "api_version TEXT",
-        "location_id TEXT",
-    ]:
-        try:
-            await db.execute(
-                f"ALTER TABLE satspay.fiat_configs ADD COLUMN {col}"
-            )
-        except OperationalError:
-            pass

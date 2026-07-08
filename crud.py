@@ -8,7 +8,6 @@ from .models import (
     Charge,
     CreateCharge,
     CreateSatsPayTheme,
-    FiatConfig,
     SatspaySettings,
     SatsPayTheme,
 )
@@ -176,39 +175,3 @@ async def update_satspay_settings(settings: SatspaySettings) -> SatspaySettings:
 
 async def delete_satspay_settings() -> None:
     await db.execute("DELETE FROM satspay.settings")
-
-
-async def get_fiat_configs(user: str) -> list[FiatConfig]:
-    return await db.fetchall(
-        """
-        SELECT * FROM satspay.fiat_configs WHERE "user" = :user
-        ORDER BY provider
-        """,
-        {"user": user},
-        FiatConfig,
-    )
-
-
-async def get_fiat_config(user: str, provider: str) -> FiatConfig | None:
-    return await db.fetchone(
-        """
-        SELECT * FROM satspay.fiat_configs
-        WHERE "user" = :user AND provider = :provider
-        """,
-        {"user": user, "provider": provider},
-        FiatConfig,
-    )
-
-
-async def save_fiat_config(config: FiatConfig, user: str) -> FiatConfig:
-    config.user = user
-    existing = await get_fiat_config(user, config.provider)
-    if existing:
-        await db.update(
-            "satspay.fiat_configs",
-            config,
-            'WHERE "user" = :user AND provider = :provider',
-        )
-    else:
-        await db.insert("satspay.fiat_configs", config)
-    return config

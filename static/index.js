@@ -4,19 +4,6 @@ window.app = Vue.createApp({
   computed: {
     endpoint() {
       return '/satspay/api/v1/settings'
-    },
-    fiatEnabledProviders() {
-      return this.fiatConfigs.filter(c => c.enabled).map(c => c.provider)
-    },
-    canSaveFiatConfig() {
-      return this.fiatConfigs
-        .filter(c => c.enabled)
-        .every(c => {
-          if (!c.api_key) return false
-          if (c.provider === 'paypal' && !c.api_secret) return false
-          if (c.provider === 'square' && !c.location_id) return false
-          return true
-        })
     }
   },
   data: function () {
@@ -175,7 +162,6 @@ window.app = Vue.createApp({
       },
       showWebhookResponse: false,
       webhookResponse: '',
-      fiatConfigs: [],
       savingSettings: false,
       showSettings: false
     }
@@ -455,25 +441,6 @@ window.app = Vue.createApp({
         })
         .catch(LNbits.utils.notifyApiError)
     },
-    loadFiatConfigs: async function () {
-      try {
-        const {data} = await LNbits.api.request(
-          'GET',
-          '/satspay/api/v1/fiat/config',
-          this.g.user.wallets[0].inkey
-        )
-        const existing = {}
-        for (const cfg of data) {
-          existing[cfg.provider] = cfg
-        }
-        const providers = ['stripe', 'paypal', 'square', 'revolut']
-        this.fiatConfigs = providers.map(p =>
-          existing[p] || {provider: p, enabled: false, api_key: '', api_secret: '', webhook_secret: '', api_endpoint: '', api_version: '', location_id: ''}
-        )
-      } catch (error) {
-        LNbits.utils.notifyApiError(error)
-      }
-    },
     loadSettings: async function () {
       try {
         const {data} = await LNbits.api.request(
@@ -502,25 +469,8 @@ window.app = Vue.createApp({
             LNbits.utils.notifyApiError(error)
           }
         }
-        const payload = {configs: this.fiatConfigs.map(cfg => ({
-          provider: cfg.provider,
-          enabled: cfg.enabled,
-          api_key: cfg.api_key || null,
-          api_secret: cfg.api_secret || null,
-          webhook_secret: cfg.webhook_secret || null,
-          api_endpoint: cfg.api_endpoint || null,
-          api_version: cfg.api_version || null,
-          location_id: cfg.location_id || null
-        }))}
-        await LNbits.api.request(
-          'PUT',
-          '/satspay/api/v1/fiat/config',
-          this.g.user.wallets[0].adminkey,
-          payload
-        )
         this.$q.notify({message: 'Settings saved', color: 'positive'})
         this.showSettings = false
-        await this.loadFiatConfigs()
         if (this.g.user.admin) {
           await this.loadSettings()
         }
@@ -538,7 +488,6 @@ window.app = Vue.createApp({
     }
     await this.getCharges()
     await this.getWalletLinks()
-    await this.loadFiatConfigs()
     LNbits.api
       .request('GET', '/api/v1/currencies')
       .then(response => {

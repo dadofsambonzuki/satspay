@@ -13,23 +13,6 @@ class SatspaySettings(BaseModel):
     network: str = "Mainnet"
 
 
-class FiatConfig(BaseModel):
-    user: str = ""
-    provider: str
-    enabled: bool = False
-    api_key: str | None = None
-    api_secret: str | None = None
-    webhook_secret: str | None = None
-    api_endpoint: str | None = None
-    api_version: str | None = None
-    location_id: str | None = None
-    extra: str | None = None
-
-
-class FiatConfigsUpdate(BaseModel):
-    configs: list[FiatConfig]
-
-
 class CreateCharge(BaseModel):
     onchainwallet: str = Query(None)
     lnbitswallet: str = Query(None)

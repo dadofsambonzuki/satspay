@@ -18,10 +18,7 @@ from .crud import (
     delete_satspay_settings,
     get_charge,
     get_charges,
-    get_fiat_config,
-    get_fiat_configs,
     get_or_create_satspay_settings,
-    save_fiat_config,
     update_charge,
     update_satspay_settings,
 )
@@ -33,7 +30,8 @@ from .helpers import (
     fetch_onchain_config_network,
     verify_fiat_webhook,
 )
-from .models import Charge, CreateCharge, FiatConfig, FiatConfigsUpdate, SatspaySettings
+from .models import Charge, CreateCharge, SatspaySettings
+from lnbits.settings import settings
 from .tasks import (
     send_success_websocket,
     start_onchain_listener,
@@ -84,38 +82,16 @@ async def api_enabled() -> dict:
 
 
 @satspay_api_router.get("/api/v1/fiat/providers")
-async def api_fiat_providers() -> list[str]:
-    return ["stripe", "paypal", "square", "revolut"]
-
-
-@satspay_api_router.get("/api/v1/fiat/config")
-async def api_get_fiat_config(wallet: WalletTypeInfo = Depends(require_invoice_key)) -> list[FiatConfig]:
-    return await get_fiat_configs(wallet.wallet.user)
-
-
-@satspay_api_router.put("/api/v1/fiat/config")
-async def api_update_fiat_config(data: FiatConfigsUpdate, wallet: WalletTypeInfo = Depends(require_invoice_key)) -> list[FiatConfig]:
-    for config in data.configs:
-        await save_fiat_config(config, wallet.wallet.user)
-    return await get_fiat_configs(wallet.wallet.user)
+async def api_fiat_providers(wallet: WalletTypeInfo = Depends(require_invoice_key)) -> list[str]:
+    return settings.get_fiat_providers_for_user(wallet.wallet.user)
 
 
 @satspay_api_router.post("/api/v1/fiat/webhook/{provider}")
 async def api_fiat_webhook(provider: str, request: Request) -> dict:
     payload = await request.body()
     signature = request.headers.get("stripe-signature") or request.headers.get("paypal-transmission-sig")
-    fiat_config = None
-    charges = await get_charges("")
-    for charge in charges:
-        if not charge.paid and charge.user:
-            fiat_config = await get_fiat_config(charge.user, provider)
-            if fiat_config:
-                break
-    if not fiat_config:
-        logger.warning(f"No fiat config found for provider {provider}")
-        return {"status": "ignored"}
     try:
-        checking_id = await verify_fiat_webhook(provider, payload, signature, fiat_config)
+        checking_id = await verify_fiat_webhook(provider, payload, signature)
     except ValueError as e:
         logger.warning(f"Fiat webhook verification failed: {e}")
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e)) from e
@@ -139,11 +115,10 @@ async def api_charge_create(data: CreateCharge, key_type: WalletTypeInfo = Depen
         rate = await get_fiat_rate_satoshis(data.currency)
         data.amount = round(rate * data.currency_amount)
     user = key_type.wallet.user
-    fiat_configs = await get_fiat_configs(user)
-    enabled_fiat = [c for c in fiat_configs if c.enabled]
-    if data.fiat_provider:
-        enabled_fiat = [c for c in enabled_fiat if c.provider == data.fiat_provider]
-    if not data.onchainwallet and not data.lnbitswallet and not data.fiat_provider and not enabled_fiat:
+    available_fiat = settings.get_fiat_providers_for_user(user)
+    if data.fiat_provider and data.fiat_provider not in available_fiat:
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=f"Fiat provider '{data.fiat_provider}' is not enabled or not authorized for your user.")
+    if not data.onchainwallet and not data.lnbitswallet and not data.fiat_provider and not available_fiat:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail="either onchainwallet, lnbitswallet, or fiat_provider are required.")
     if data.lnbitswallet:
         lnbitswallet = await get_wallet(data.lnbitswallet)
@@ -166,22 +141,19 @@ async def api_charge_create(data: CreateCharge, key_type: WalletTypeInfo = Depen
     else:
         charge = await create_charge(user=user, data=data)
 
-    fiat_results = {}
-    for fiat_config in enabled_fiat:
+    if data.fiat_provider:
         try:
-            data.fiat_provider = fiat_config.provider
-            fiat_result = await create_fiat_invoice_for_charge(charge, data, fiat_config)
+            fiat_result = await create_fiat_invoice_for_charge(charge, data, data.fiat_provider)
             if fiat_result:
-                fiat_results[fiat_config.provider] = {
-                    "payment_request": fiat_result.get("payment_request"),
-                    "checking_id": fiat_result.get("checking_id"),
-                }
+                charge.fiat_payment_requests = json.dumps({
+                    data.fiat_provider: {
+                        "payment_request": fiat_result.get("payment_request"),
+                        "checking_id": fiat_result.get("checking_id"),
+                    }
+                })
+                charge = await update_charge(charge)
         except Exception as exc:
-            logger.warning(f"Failed to create fiat invoice for {fiat_config.provider}: {exc}")
-
-    if fiat_results:
-        charge.fiat_payment_requests = json.dumps(fiat_results)
-        charge = await update_charge(charge)
+            logger.warning(f"Failed to create fiat invoice for {data.fiat_provider}: {exc}")
     return charge
 
 
