@@ -91,28 +91,45 @@ if (window.app) {
         </div>
       </div>
       <div class="row justify-center q-mb-sm">
-        <div class="col-all">
-          <a class="text-secondary" :href="href">
-            <q-responsive :ratio="1" class="q-mx-md">
-              <lnbits-qrcode :value="value"></lnbits-qrcode>
-            </q-responsive>
-          </a>
+        <div class="col-all text-center">
+          <lnbits-qrcode
+            ref="qrcode"
+            :value="value"
+            :href="href"
+            :show-buttons="false"
+            :max-width="420"
+          ></lnbits-qrcode>
         </div>
       </div>
-      <div class="row items-center q-mt-lg">
-        <div class="col text-center">
-          <q-btn
-            outline
-            color="grey"
-            @click="utils.copyText(value)"
-            :label="$t('satspay.copy_address')"
-          ></q-btn>
-        </div>
+      <div class="row justify-center q-mt-sm">
+        <q-btn unelevated color="primary" icon="payment" class="q-mr-sm" @click="pay">
+          <span v-text="$t('satspay.pay')"></span>
+        </q-btn>
+        <q-btn unelevated color="grey" icon="content_copy" class="q-mr-sm" @click="utils.copyText(value)">
+          <span v-text="$t('satspay.copy')"></span>
+        </q-btn>
+        <q-btn unelevated color="grey" icon="download" @click="downloadQr">
+          <span v-text="$t('satspay.download')"></span>
+        </q-btn>
       </div>
     </div>`,
     computed: {
       chargeAmountBtc() {
         return (this.chargeAmount / 1e8).toFixed(8)
+      }
+    },
+    methods: {
+      pay() {
+        if (this.href) {
+          window.location.href = this.href
+        } else {
+          this.utils.copyText(this.value)
+        }
+      },
+      downloadQr() {
+        if (this.$refs.qrcode) {
+          this.$refs.qrcode.downloadSVG()
+        }
       }
     }
   })

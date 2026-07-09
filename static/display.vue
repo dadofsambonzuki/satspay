@@ -200,7 +200,7 @@
                     :charge-amount="charge.amount"
                     :type="'btc'"
                     :value="charge.onchainaddress"
-                    :href="'bitcoin:' + charge.onchainaddress"
+                    :href="'bitcoin:'+charge.onchainaddress.toUpperCase()+'?amount='+(charge.amount/1e8).toFixed(8)"
                   ></satspay-show-qr>
                 </div>
               </div>
