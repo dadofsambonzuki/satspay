@@ -179,7 +179,7 @@
               </div>
             </q-tab-panel>
             <q-tab-panel name="btc">
-              <div class="row justify-center q-mt-md">
+              <div class="row justify-center q-mt-sm">
                 <div class="col-sm-10 col-md-8">
                   <satspay-show-qr
                     :charge-amount="charge.amount"
@@ -191,9 +191,9 @@
               </div>
             </q-tab-panel>
             <q-tab-panel name="fiat">
-              <div class="row justify-center q-mt-md">
-                <div class="col text-center">
-                  <div class="text-subtitle2 q-mb-md">
+              <div class="row justify-center q-mt-sm">
+                <div class="col-sm-10 col-md-8 text-center">
+                  <div class="text-subtitle2 q-mb-sm">
                     <strong><span v-text="formattedFiatAmount"></span>:</strong>
                     <span class="q-ml-xs" v-text="$t('satspay.fiat_payment_desc')"></span>
                   </div>
