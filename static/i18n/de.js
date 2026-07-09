@@ -98,7 +98,6 @@ window.i18n.global.mergeLocaleMessage('de', {
     send_btc_to_address: 'an diese Onchain-Adresse',
     pay_ln_invoice: 'Diese Lightning-Network-Rechnung bezahlen:',
     scan_uqr: 'QR mit einer BIP21-kompatiblen Wallet scannen:',
-    copy_address: 'Adresse kopieren',
     payment_received: 'Zahlung erhalten',
     awaiting_payment: 'Warte auf Zahlung...',
     time_elapsed: 'Zeit abgelaufen',
@@ -109,6 +108,9 @@ window.i18n.global.mergeLocaleMessage('de', {
     fiat_tab: 'Fiat',
     fiat_payment_desc: 'Mit Fiat bezahlen:',
     fiat_no_payment_url: 'Keine Zahlungs-URL für diesen Anbieter konfiguriert',
-    fiat_popup_blocked: 'Popup blockiert. Bitte erlauben Sie Popups oder versuchen Sie den untenstehenden Link.'
+    fiat_popup_blocked: 'Popup blockiert. Bitte erlauben Sie Popups oder versuchen Sie den untenstehenden Link.',
+    pay: 'Bezahlen',
+    copy: 'Kopieren',
+    download: 'Herunterladen'
   }
 })
