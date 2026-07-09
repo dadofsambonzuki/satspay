@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import json
 import traceback
 import uuid
 
@@ -164,7 +165,11 @@ async def create_fiat_invoice_for_charge(
 
     try:
         if provider == "stripe":
-            result = await _create_stripe_checkout(fiat_amount, fiat_currency, payment_hash)
+            result = await _create_stripe_checkout(
+                fiat_amount, fiat_currency, payment_hash,
+                charge_id=charge.id,
+                success_url=charge.completelink
+            )
         elif provider == "paypal":
             result = await _create_paypal_checkout(fiat_amount, fiat_currency, payment_hash)
         elif provider == "revolut":
@@ -210,7 +215,7 @@ def _verify_stripe_webhook(payload: bytes, sig_header: str, secret: str) -> str 
         expected = hmac.new(secret.encode(), signed_payload.encode(), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(expected, v1_val):
             raise ValueError("Invalid signature")
-        return t_val
+        return json.loads(payload).get("data", {}).get("object", {}).get("id")
     except Exception as e:
         raise ValueError(f"Stripe webhook verification failed: {e}") from e
 
@@ -220,12 +225,16 @@ def _verify_revolut_webhook(payload: bytes, signature: str, secret: str) -> str 
         computed = hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
         if not hmac.compare_digest(computed, signature.replace("v1=", "")):
             raise ValueError("Invalid signature")
-        return "revolut_order"
+        return json.loads(payload).get("data", {}).get("object", {}).get("id")
     except Exception as e:
         raise ValueError(f"Revolut webhook verification failed: {e}") from e
 
 
-async def _create_stripe_checkout(amount: float, currency: str, payment_hash: str) -> dict:
+async def _create_stripe_checkout(
+    amount: float, currency: str, payment_hash: str,
+    charge_id: str,
+    success_url: str | None = None
+) -> dict:
     from urllib.parse import urlencode
     api_key = settings.stripe_api_secret_key
     if not api_key:
@@ -233,8 +242,8 @@ async def _create_stripe_checkout(amount: float, currency: str, payment_hash: st
     endpoint = settings.stripe_api_endpoint or "https://api.stripe.com"
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/x-www-form-urlencoded", "User-Agent": settings.user_agent}
     amount_cents = int(amount * 100)
-    success_url = settings.stripe_payment_success_url or "https://lnbits.com"
-    form_data = {"mode": "payment", "success_url": success_url, "metadata[payment_hash]": payment_hash, "metadata[source]": "satspay", "line_items[0][price_data][currency]": currency.lower(), "line_items[0][price_data][product_data][name]": "SatsPay Payment", "line_items[0][price_data][unit_amount]": str(amount_cents), "line_items[0][quantity]": "1"}
+    success_url = success_url or settings.stripe_payment_success_url or "https://lnbits.com"
+    form_data = {"mode": "payment", "success_url": success_url, "metadata[payment_hash]": payment_hash, "metadata[source]": "satspay", "metadata[satspay_charge_id]": charge_id, "line_items[0][price_data][currency]": currency.lower(), "line_items[0][price_data][product_data][name]": "SatsPay Payment", "line_items[0][price_data][unit_amount]": str(amount_cents), "line_items[0][quantity]": "1"}
     async with httpx.AsyncClient(base_url=endpoint, headers=headers) as client:
         r = await client.post("/v1/checkout/sessions", content=urlencode(form_data))
         if r.status_code >= 400:

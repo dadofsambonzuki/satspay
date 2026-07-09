@@ -6,7 +6,7 @@ from loguru import logger
 from .crud import db
 from .tasks import restart_address_tracking, wait_for_onchain, wait_for_paid_invoices
 from .views import satspay_generic_router
-from .views_api import satspay_api_router
+from .views_api import handle_fiat_webhook_event, satspay_api_router
 from .views_api_themes import satspay_theme_router
 from .websocket_handler import restart_websocket_task, websocket_task
 
@@ -26,6 +26,9 @@ scheduled_tasks: list[asyncio.Task] = []
 
 
 def satspay_stop():
+    from lnbits.core.views.callback_api import unregister_fiat_webhook_handler
+
+    unregister_fiat_webhook_handler(handle_fiat_webhook_event)
     for task in scheduled_tasks:
         try:
             task.cancel()
@@ -36,7 +39,10 @@ def satspay_stop():
 
 
 def satspay_start():
+    from lnbits.core.views.callback_api import register_fiat_webhook_handler
     from lnbits.tasks import create_permanent_unique_task, create_unique_task
+
+    register_fiat_webhook_handler("stripe", "satspay", handle_fiat_webhook_event)
 
     paid_invoices_task = create_permanent_unique_task(
         "ext_satspay_paid_invoices", wait_for_paid_invoices
@@ -49,4 +55,10 @@ def satspay_start():
     )
 
 
-__all__ = ["db", "satspay_ext", "satspay_start", "satspay_static_files", "satspay_stop"]
+__all__ = [
+    "db",
+    "satspay_ext",
+    "satspay_start",
+    "satspay_static_files",
+    "satspay_stop",
+]

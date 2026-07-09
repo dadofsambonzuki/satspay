@@ -47,20 +47,10 @@ if (window.app) {
           <q-btn
             outline
             v-if="charge.completelink"
-            :loading="charge.paid"
             type="a"
             :href="charge.completelink"
-            :label="charge.completelinktext"
-          >
-            <template v-slot:loading>
-              <span v-text="charge.completelinktext"></span>
-            </template>
-          </q-btn>
-          <p
-            v-if="charge.completelink"
-            class="q-pt-md"
-            v-text="$t('satspay.redirecting')"
-          ></p>
+            :label="charge.completelinktext || 'View your tickets'"
+          ></q-btn>
         </div>
       </div>
     </div>`
@@ -289,11 +279,6 @@ window.PageSatspayPublic = {
         if (this.charge.paid) {
           this.charge.progress = 1
           this.charge.paid = true
-          if (this.charge.completelink) {
-            setTimeout(() => {
-              window.location.href = this.charge.completelink
-            }, 5000)
-          }
           this.$q.notify({
             type: 'positive',
             message: this.$t('satspay.payment_received'),

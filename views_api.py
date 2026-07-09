@@ -47,7 +47,7 @@ async def _find_charge_by_fiat_checking_id(checking_id: str, provider: str) -> C
     return await db.fetchone(
         """
         SELECT * FROM satspay.charges
-        WHERE paid = false AND (
+        WHERE (
             (fiat_checking_id = :checking_id AND fiat_provider = :provider)
             OR (
                 fiat_payment_requests IS NOT NULL
@@ -62,6 +62,44 @@ async def _find_charge_by_fiat_checking_id(checking_id: str, provider: str) -> C
         },
         Charge,
     )
+
+
+async def handle_fiat_webhook_event(
+    provider: str, event: dict, metadata: dict
+) -> bool:
+    provider = provider.lower()
+    if provider != "stripe" or metadata.get("source") != "satspay":
+        return False
+
+    event_type = event.get("type")
+    event_object = event.get("data", {}).get("object", {})
+    if event_type != "checkout.session.completed":
+        return False
+    if event_object.get("payment_status") != "paid":
+        return False
+
+    checking_id = event_object.get("id")
+    if not checking_id:
+        return False
+
+    matching_charge = await _find_charge_by_fiat_checking_id(checking_id, provider)
+    if not matching_charge:
+        return False
+    if metadata.get("satspay_charge_id") and metadata["satspay_charge_id"] != matching_charge.id:
+        logger.warning(
+            f"SatsPay charge metadata mismatch for Stripe session '{checking_id}'."
+        )
+        return False
+    if matching_charge.paid:
+        return True
+
+    matching_charge.balance = matching_charge.amount
+    matching_charge.paid = True
+    matching_charge = await update_charge(matching_charge)
+    await send_success_websocket(matching_charge)
+    if matching_charge.webhook:
+        await call_webhook(matching_charge)
+    return True
 
 
 async def _get_wallet_network(wallet: Wallet) -> str:
