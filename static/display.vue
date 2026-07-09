@@ -193,20 +193,20 @@
             <q-tab-panel name="fiat">
               <div class="row justify-center q-mt-sm">
                 <div class="col-sm-10 col-md-8 text-center">
-                  <div class="text-subtitle2 q-mb-sm">
-                    <strong><span v-text="formattedFiatAmount"></span>:</strong>
-                    <span class="q-ml-xs" v-text="$t('satspay.fiat_payment_desc')"></span>
-                  </div>
-                  <q-btn
-                    v-for="provider in fiatProvidersList"
-                    :key="provider.name"
-                    unelevated
-                    color="primary"
-                    icon="payment"
-                    class="q-mr-sm q-mb-sm"
-                    @click="payFiat(provider)"
-                    :label="provider.name"
-                  ></q-btn>
+                  <template v-for="provider in fiatProvidersList" :key="provider.name">
+                    <div class="text-subtitle2 q-mb-sm">
+                      <span v-text="$t('satspay.fiat_payment_desc', {amount: formattedFiatAmount, provider: provider.name.charAt(0).toUpperCase() + provider.name.slice(1)})"></span>
+                    </div>
+                    <q-btn
+                      unelevated
+                      color="primary"
+                      icon="payment"
+                      class="q-mr-sm q-mb-sm"
+                      @click="payFiat(provider)"
+                    >
+                      <span v-text="$t('satspay.pay')"></span>
+                    </q-btn>
+                  </template>
                 </div>
               </div>
             </q-tab-panel>

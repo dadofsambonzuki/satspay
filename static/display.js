@@ -74,19 +74,10 @@ if (window.app) {
       <div class="row justify-center q-mb-sm">
         <div class="col text-center">
           <span v-if="type == 'btc'" class="text-subtitle2">
-            Send
-            <strong><span v-text="chargeAmountBtc"></span> BTC</strong> <span v-text="$t('satspay.send_btc_to_address')"></span>
+            Send <strong><span v-text="chargeAmountBtc"></span> BTC</strong> <span v-text="$t('satspay.send_btc_to_address')"></span>:
           </span>
-          <span
-            v-if="type == 'ln'"
-            class="text-subtitle2"
-            v-text="$t('satspay.pay_ln_invoice')"
-          ></span>
-          <span
-            v-if="type == 'uqr'"
-            class="text-subtitle2"
-            v-text="$t('satspay.scan_uqr')"
-          ></span>
+          <span v-if="type == 'ln'" class="text-subtitle2" v-text="$t('satspay.pay_ln_invoice')"></span>
+          <span v-if="type == 'uqr'" class="text-subtitle2" v-text="$t('satspay.scan_uqr')"></span>
         </div>
       </div>
       <div class="row justify-center q-mb-sm">
@@ -229,8 +220,10 @@ window.PageSatspayPublic = {
       }
     },
     formattedFiatAmount() {
-      if (!this.charge?.currency_amount || !this.charge?.fiat_currency) return ''
-      return `${Number(this.charge.currency_amount).toFixed(2)} ${this.charge.fiat_currency.toUpperCase()}`
+      const amt = this.charge?.currency_amount
+      const cur = this.charge?.fiat_currency || this.charge?.currency
+      if (amt == null || !cur) return ''
+      return `${Number(amt).toFixed(2)} ${cur.toUpperCase()}`
     },
     hasEnded() {
       const chargeTimeSeconds = this.charge.time * 60
