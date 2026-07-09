@@ -75,8 +75,7 @@ if (window.app) {
         <div class="col text-center">
           <span v-if="type == 'btc'" class="text-subtitle2">
             Send
-            <strong><span v-text="chargeAmountBtc"></span> BTC</strong>
-            <span v-text="$t('satspay.send_btc_to_address')"></span>
+            <strong><span v-text="chargeAmountBtc"></span> BTC</strong> <span v-text="$t('satspay.send_btc_to_address')"></span>
           </span>
           <span
             v-if="type == 'ln'"
@@ -228,6 +227,10 @@ window.PageSatspayPublic = {
       } catch {
         return []
       }
+    },
+    formattedFiatAmount() {
+      if (!this.charge?.currency_amount || !this.charge?.fiat_currency) return ''
+      return `${Number(this.charge.currency_amount).toFixed(2)} ${this.charge.fiat_currency.toUpperCase()}`
     },
     hasEnded() {
       const chargeTimeSeconds = this.charge.time * 60

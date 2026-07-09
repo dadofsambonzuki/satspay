@@ -208,15 +208,16 @@
             <q-tab-panel name="fiat">
               <div class="row justify-center q-mt-md">
                 <div class="col text-center">
-                  <div
-                    class="text-subtitle2 q-mb-md"
-                    v-text="$t('satspay.fiat_payment_desc')"
-                  ></div>
+                  <div class="text-subtitle2 q-mb-md">
+                    <strong v-text="formattedFiatAmount"></strong>
+                    <span class="q-ml-xs" v-text="$t('satspay.fiat_payment_desc')"></span>
+                  </div>
                   <q-btn
                     v-for="provider in fiatProvidersList"
                     :key="provider.name"
                     unelevated
                     color="primary"
+                    icon="payment"
                     class="q-mr-sm q-mb-sm"
                     @click="payFiat(provider)"
                     :label="provider.name"
