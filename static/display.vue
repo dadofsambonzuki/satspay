@@ -194,7 +194,7 @@
               <div class="row justify-center q-mt-md">
                 <div class="col text-center">
                   <div class="text-subtitle2 q-mb-md">
-                    <strong v-text="formattedFiatAmount"></strong>
+                    <strong><span v-text="formattedFiatAmount"></span>:</strong>
                     <span class="q-ml-xs" v-text="$t('satspay.fiat_payment_desc')"></span>
                   </div>
                   <q-btn
