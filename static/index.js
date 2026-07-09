@@ -138,6 +138,7 @@ window.PageSatspay = {
   data() {
     return {
       fiatRates: {},
+      fiatProviders: [],
       settings: [
         {
           type: 'str',
@@ -466,6 +467,25 @@ window.PageSatspay = {
           this.fiatRates = rates
         })
         .catch(LNbits.utils.notifyApiError)
+    },
+    onFiatToggle(val) {
+      if (val && this.fiatProviders.length > 0) {
+        this.formDialogCharge.data.fiat_provider = this.fiatProviders[0]
+      } else {
+        this.formDialogCharge.data.fiat_provider = ''
+      }
+    },
+    loadFiatProviders: async function () {
+      try {
+        const {data} = await LNbits.api.request(
+          'GET',
+          '/satspay/api/v1/fiat/providers',
+          this.g.user.wallets[0].inkey
+        )
+        this.fiatProviders = data || []
+      } catch (error) {
+        this.fiatProviders = []
+      }
     }
   },
   async created() {

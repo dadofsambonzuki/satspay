@@ -512,6 +512,26 @@
                 :label="$t('satspay.lnbits_wallet_label')"
               ></q-checkbox>
             </div>
+            <div class="col">
+              <div v-if="fiatProviders.length > 0">
+                <q-checkbox
+                  v-model="formDialogCharge.data.fiat"
+                  :label="$t('satspay.fiat_payment')"
+                  @update:model-value="onFiatToggle"
+                ></q-checkbox>
+              </div>
+              <div v-else>
+                <q-checkbox
+                  :value="false"
+                  :label="$t('satspay.fiat_payment')"
+                  disabled
+                >
+                  <q-tooltip
+                    v-text="$t('satspay.fiat_not_configured')"
+                  ></q-tooltip>
+                </q-checkbox>
+              </div>
+            </div>
           </div>
 
           <div v-if="formDialogCharge.data.onchain">
