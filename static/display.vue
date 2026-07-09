@@ -179,21 +179,6 @@
               </div>
             </q-tab-panel>
             <q-tab-panel name="btc">
-              <div class="row justify-center">
-                <div class="col text-center">
-                  <a
-                    class="text-secondary"
-                    style="color: unset"
-                    :href="mempoolLink"
-                    target="_blank"
-                  >
-                    <span
-                      class="text-subtitle1"
-                      v-text="charge.onchainaddress"
-                    ></span>
-                  </a>
-                </div>
-              </div>
               <div class="row justify-center q-mt-md">
                 <div class="col-sm-10 col-md-8">
                   <satspay-show-qr
