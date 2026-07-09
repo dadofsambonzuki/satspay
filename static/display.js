@@ -91,14 +91,14 @@ if (window.app) {
           ></lnbits-qrcode>
         </div>
       </div>
-      <div class="row justify-center q-mt-sm">
-        <q-btn unelevated color="primary" icon="payment" class="q-mr-sm" @click="pay">
+      <div class="row justify-center q-mt-sm" style="flex-wrap: wrap;">
+        <q-btn unelevated color="primary" icon="payment" class="q-mr-sm q-mb-sm" @click="pay">
           <span v-text="$t('satspay.pay')"></span>
         </q-btn>
-        <q-btn unelevated color="grey" icon="content_copy" class="q-mr-sm" @click="utils.copyText(value)">
+        <q-btn unelevated color="grey" icon="content_copy" class="q-mr-sm q-mb-sm" @click="utils.copyText(value)">
           <span v-text="$t('satspay.copy')"></span>
         </q-btn>
-        <q-btn unelevated color="grey" icon="download" @click="downloadQr">
+        <q-btn unelevated color="grey" icon="download" class="q-mb-sm" @click="downloadQr">
           <span v-text="$t('satspay.download')"></span>
         </q-btn>
       </div>
