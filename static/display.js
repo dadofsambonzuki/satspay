@@ -198,6 +198,20 @@ window.PageSatspayPublic = {
       }
       return queryString
     },
+    fiatProvidersList() {
+      if (!this.charge?.fiat_payment_requests) return []
+      try {
+        const reqs = typeof this.charge.fiat_payment_requests === 'string'
+          ? JSON.parse(this.charge.fiat_payment_requests)
+          : this.charge.fiat_payment_requests
+        return Object.entries(reqs).map(([name, data]) => ({
+          name,
+          payment_request: data.payment_request
+        }))
+      } catch {
+        return []
+      }
+    },
     hasEnded() {
       const chargeTimeSeconds = this.charge.time * 60
       const now = new Date().getTime() / 1000
@@ -229,6 +243,24 @@ window.PageSatspayPublic = {
         this.initWs()
       } catch (error) {
         LNbits.utils.notifyApiError(error)
+      }
+    },
+    payFiat(provider) {
+      if (!provider.payment_request) {
+        this.$q.notify({
+          type: 'negative',
+          message: this.$t('satspay.fiat_no_payment_url'),
+          timeout: 5000
+        })
+        return
+      }
+      const win = window.open(provider.payment_request, '_blank')
+      if (!win) {
+        this.$q.notify({
+          type: 'warning',
+          message: this.$t('satspay.fiat_popup_blocked'),
+          timeout: 10000
+        })
       }
     },
     async initWs() {

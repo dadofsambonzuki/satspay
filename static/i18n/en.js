@@ -100,6 +100,12 @@ window.i18n.global.mergeLocaleMessage('en', {
     payment_received: 'Payment received',
     awaiting_payment: 'Awaiting payment...',
     time_elapsed: 'Time elapsed',
-    ws_reconnecting: 'WebSocket connection closed. Retrying...'
+    ws_reconnecting: 'WebSocket connection closed. Retrying...',
+    fiat_payment: 'Fiat',
+    fiat_not_configured: 'No fiat providers configured',
+    fiat_tab: 'Fiat',
+    fiat_payment_desc: 'Pay with fiat:',
+    fiat_no_payment_url: 'No payment URL configured for this provider',
+    fiat_popup_blocked: 'Popup blocked. Please allow popups or try the link below.'
   }
 })

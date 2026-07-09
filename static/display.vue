@@ -3,7 +3,7 @@
     <q-spinner color="primary" size="3em"></q-spinner>
   </div>
   <div v-else class="row justify-center q-mt-md">
-    <div class="col-lg-4 col-md-6 col-sm-8 col-xs-10">
+    <div class="col-12 col-sm-10 col-md-8 col-lg-6 col-xl-5">
       <q-card>
         <q-card-section class="text-center">
           <div class="text-h4" v-text="charge.name || 'LNbits SatsPay'"></div>
@@ -145,6 +145,12 @@
               icon="link"
               :label="$t('satspay.btc_tab')"
             ></q-tab>
+            <q-tab
+              v-if="fiatProvidersList.length"
+              name="fiat"
+              icon="payments"
+              :label="$t('satspay.fiat_tab')"
+            ></q-tab>
           </q-tabs>
           <q-separator></q-separator>
           <q-tab-panels v-model="tab" animated style="background: none">
@@ -196,6 +202,25 @@
                     :value="charge.onchainaddress"
                     :href="'bitcoin:' + charge.onchainaddress"
                   ></satspay-show-qr>
+                </div>
+              </div>
+            </q-tab-panel>
+            <q-tab-panel name="fiat">
+              <div class="row justify-center q-mt-md">
+                <div class="col text-center">
+                  <div
+                    class="text-subtitle2 q-mb-md"
+                    v-text="$t('satspay.fiat_payment_desc')"
+                  ></div>
+                  <q-btn
+                    v-for="provider in fiatProvidersList"
+                    :key="provider.name"
+                    unelevated
+                    color="primary"
+                    class="q-mr-sm q-mb-sm"
+                    @click="payFiat(provider)"
+                    :label="provider.name"
+                  ></q-btn>
                 </div>
               </div>
             </q-tab-panel>
