@@ -26,9 +26,12 @@ scheduled_tasks: list[asyncio.Task] = []
 
 
 def satspay_stop():
-    from lnbits.core.views.callback_api import unregister_fiat_webhook_handler
+    try:
+        from lnbits.core.views.callback_api import unregister_fiat_webhook_handler
 
-    unregister_fiat_webhook_handler(handle_fiat_webhook_event)
+        unregister_fiat_webhook_handler(handle_fiat_webhook_event)
+    except ImportError:
+        pass
     for task in scheduled_tasks:
         try:
             task.cancel()
@@ -39,10 +42,19 @@ def satspay_stop():
 
 
 def satspay_start():
-    from lnbits.core.views.callback_api import register_fiat_webhook_handler
-    from lnbits.tasks import create_permanent_unique_task, create_unique_task
+    try:
+        from lnbits.core.views.callback_api import register_fiat_webhook_handler
 
-    register_fiat_webhook_handler("stripe", "satspay", handle_fiat_webhook_event)
+        register_fiat_webhook_handler("stripe", "satspay", handle_fiat_webhook_event)
+    except ImportError:
+        logger.warning(
+            "register_fiat_webhook_handler not available in core, "
+            "fiat webhook handling disabled. Upgrade core or apply PR #4051."
+        )
+    from lnbits.tasks import create_permanent_unique_task, create_unique_task
+    except ImportError:
+        logger.debug("register_fiat_webhook_handler not available in core")
+    from lnbits.tasks import create_permanent_unique_task, create_unique_task
 
     paid_invoices_task = create_permanent_unique_task(
         "ext_satspay_paid_invoices", wait_for_paid_invoices
