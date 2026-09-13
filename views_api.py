@@ -68,6 +68,14 @@ async def api_charge_create(data: CreateCharge, key_type: WalletTypeInfo = Depen
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail="either amount or currency_amount are required.")
     if data.currency and data.currency_amount:
         rate = await get_fiat_rate_satoshis(data.currency)
+        if rate <= 0:
+            raise HTTPException(
+                status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+                detail=(
+                    f"Could not fetch Bitcoin price for {data.currency}. "
+                    "Please try again later."
+                ),
+            )
         data.amount = round(rate * data.currency_amount)
     user = key_type.wallet.user
     available_fiat = settings.get_fiat_providers_for_user(user)
