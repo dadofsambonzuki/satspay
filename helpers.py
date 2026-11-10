@@ -8,7 +8,7 @@ from lnbits.core.services import create_payment_request
 from lnbits.settings import settings
 from loguru import logger
 
-from .crud import get_or_create_satspay_settings
+from .crud import get_or_create_satspay_settings, update_charge
 from .models import Charge, CreateCharge, OnchainBalance
 
 
@@ -58,7 +58,9 @@ async def call_webhook(charge: Charge):
         return {"webhook_success": False, "webhook_message": str(e)}
 
 
-async def fetch_onchain_balance(onchain_address: str) -> OnchainBalance:
+async def fetch_onchain_balance(
+    onchain_address: str, since_ts: float | None = None
+) -> OnchainBalance:
     settings = await get_or_create_satspay_settings()
     async with httpx.AsyncClient() as client:
         res = await client.get(
@@ -68,9 +70,9 @@ async def fetch_onchain_balance(onchain_address: str) -> OnchainBalance:
         data = res.json()
         confirmed_txs = [tx for tx in data if tx["status"]["confirmed"]]
         unconfirmed_txs = [tx for tx in data if not tx["status"]["confirmed"]]
-        txids = [tx["txid"] for tx in data]
-        confirmed = sum_transactions(onchain_address, confirmed_txs)
-        unconfirmed = sum_transactions(onchain_address, unconfirmed_txs)
+        txids = [tx["txid"] for tx in data if tx_after(tx, since_ts)]
+        confirmed = sum_transactions(onchain_address, confirmed_txs, since_ts)
+        unconfirmed = sum_transactions(onchain_address, unconfirmed_txs, since_ts)
         return OnchainBalance(confirmed=confirmed, unconfirmed=unconfirmed, txids=txids)
 
 
@@ -132,7 +134,13 @@ async def check_charge_balance(charge: Charge) -> Charge:
 
     if charge.onchainaddress:
         try:
-            balance = await fetch_onchain_balance(charge.onchainaddress)
+            # Only money that arrived after this charge was created may settle
+            # it. Without `since_ts`, a balance already sitting on the address
+            # (a swept-in deposit, or an address reused from the watch-only
+            # wallet's pre-generated list) settles the charge for free.
+            balance = await fetch_onchain_balance(
+                charge.onchainaddress, charge.timestamp.timestamp()
+            )
             charge.add_extra({"txids": balance.txids})
             if (
                 balance.confirmed != charge.balance
@@ -153,11 +161,40 @@ async def check_charge_balance(charge: Charge) -> Charge:
 
     charge.paid = charge.balance >= charge.amount
 
+    if not charge.paid:
+        return charge
+
+    # Persist the settled state BEFORE firing the webhook so webhook handlers
+    # that re-fetch the charge (e.g. GET /satspay/api/v1/charge/{id}) observe
+    # it as paid. Mirrors the ordering in tasks._handle_ws_message.
+    charge = await update_charge(charge)
+
     if charge.webhook:
         resp = await call_webhook(charge)
         charge.add_extra(resp)
+        charge = await update_charge(charge)
 
     return charge
+
+
+def tx_confirmed_time(tx: dict) -> int | None:
+    """Block time (unix seconds) of a confirmed tx, None while unconfirmed."""
+    status = tx.get("status") or {}
+    if not status.get("confirmed"):
+        return None
+    block_time = status.get("block_time")
+    return int(block_time) if block_time else None
+
+
+def tx_after(tx: dict, since_ts: float | None) -> bool:
+    """Is this tx new enough to count towards a charge created at `since_ts`?
+
+    Unconfirmed txs always count: they are by definition arriving now.
+    """
+    if since_ts is None:
+        return True
+    ts = tx_confirmed_time(tx)
+    return ts is None or ts >= since_ts
 
 
 def sum_outputs(address: str, vouts) -> int:
@@ -166,8 +203,21 @@ def sum_outputs(address: str, vouts) -> int:
     )
 
 
-def sum_transactions(address: str, txs) -> int:
-    return sum([sum_outputs(address, tx["vout"]) for tx in txs])
+def sum_transactions(address: str, txs, since_ts: float | None = None) -> int:
+    """Total paid TO `address` by `txs`.
+
+    With `since_ts`, txs confirmed before the charge was created are ignored.
+    A charge must be settled by money that arrived after it exists, never by a
+    balance already sitting on the address — a swept-in deposit, or an address
+    reused from the watch-only wallet's pre-generated list, would otherwise
+    settle every charge issued on it for free.
+    """
+    total = 0
+    for tx in txs:
+        if not tx_after(tx, since_ts):
+            continue
+        total += sum_outputs(address, tx["vout"])
+    return total
 
 
 def get_txids(address: str, data) -> list[str]:
