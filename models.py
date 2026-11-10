@@ -1,20 +1,44 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
+from urllib.parse import urlsplit
 
 from fastapi.param_functions import Query
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+
+ONCHAIN_WALLET_REF_PATTERN = re.compile(r"^(?:core:)?[a-zA-Z0-9_-]+$")
 
 
 class SatspaySettings(BaseModel):
     webhook_method: str = "GET"
     mempool_url: str = "https://mempool.space"
     network: str = "Mainnet"
+    # Off by default: the mempool endpoint is an administrator setting, but a
+    # private destination is only allowed when that administrator says so.
+    mempool_allow_private_ips: bool = False
+
+    @field_validator("mempool_url")
+    @classmethod
+    def validate_mempool_url(cls, value: str) -> str:
+        parts = urlsplit((value or "").strip())
+        if (
+            parts.scheme not in {"http", "https"}
+            or not parts.hostname
+            or parts.username
+            or parts.password
+            or parts.query
+            or parts.fragment
+        ):
+            raise ValueError(
+                "Use an HTTP(S) mempool URL without credentials, query or fragment."
+            )
+        return value.strip()
 
 
 class CreateCharge(BaseModel):
-    onchainwallet: str = Query(None)
+    onchainwallet: str | None = Query(None)
     lnbitswallet: str = Query(None)
     name: str = Query(None)
     description: str = Query(...)
@@ -31,6 +55,13 @@ class CreateCharge(BaseModel):
     extra: str | None = Query(None)
     fiat_provider: str | None = Query(None)
     fiat_currency: str | None = Query(None)
+
+    @field_validator("onchainwallet")
+    @classmethod
+    def validate_onchainwallet(cls, value):
+        if value and not ONCHAIN_WALLET_REF_PATTERN.fullmatch(value):
+            raise ValueError("Invalid onchain wallet reference.")
+        return value
 
 
 class Charge(BaseModel):

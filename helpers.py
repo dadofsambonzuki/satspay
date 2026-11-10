@@ -1,11 +1,12 @@
 import json
-import traceback
+import re
 
 import httpx
 from lnbits.core.crud import get_standalone_payment
 from lnbits.core.models import CreateInvoice
 from lnbits.core.services import create_payment_request
 from lnbits.settings import settings
+from lnbits.utils.safe_http import SafeHttpClient
 from loguru import logger
 
 from .crud import get_or_create_satspay_settings, update_charge
@@ -25,13 +26,22 @@ def _charge_json(charge: Charge) -> tuple[str, dict]:
 
 
 async def call_webhook(charge: Charge):
+    """Deliver a charge to the merchant's webhook.
+
+    The target is supplied by the charge owner, so the request goes through
+    `SafeHttpClient`: loopback, LAN, link-local/metadata and public self
+    addresses are refused, redirects are not followed, and `read_body=False`
+    means the reply is never buffered. The result therefore carries no response
+    body — the caller must not be able to read an internal service's answer —
+    and the failure path logs neither the target nor the reason.
+    """
     try:
         assert charge.webhook, "charge has no webhook"
         charge_str, charge_data = _charge_json(charge)
-        settings = await get_or_create_satspay_settings()
-        async with httpx.AsyncClient() as client:
+        config = await get_or_create_satspay_settings()
+        async with SafeHttpClient(read_body=False) as client:
             # wordpress expects a GET request with json-encoded binary content
-            if settings.webhook_method == "GET":
+            if config.webhook_method == "GET":
                 r = await client.request(
                     method="GET",
                     url=charge.webhook,
@@ -45,26 +55,38 @@ async def call_webhook(charge: Charge):
                     timeout=10,
                 )
             r.raise_for_status()
-            logger.success(f"Webhook sent for charge {charge.id}")
-            return {
-                "webhook_success": True,
-                "webhook_message": r.reason_phrase,
-                "webhook_response": r.text,
-            }
-    except Exception as e:
+        logger.success(f"Webhook sent for charge {charge.id}")
+        return {
+            "webhook_success": True,
+            "webhook_message": "Webhook delivered.",
+            "webhook_response": "",
+        }
+    except Exception:
+        # Deliberately terse: the destination and the failure reason describe an
+        # address the caller was not allowed to reach.
         logger.warning(f"Failed to call webhook for charge {charge.id}")
-        logger.warning(charge.webhook)
-        logger.warning(traceback.format_exc())
-        return {"webhook_success": False, "webhook_message": str(e)}
+        return {
+            "webhook_success": False,
+            "webhook_message": "Webhook request failed.",
+            "webhook_response": "",
+        }
 
 
 async def fetch_onchain_balance(
     onchain_address: str, since_ts: float | None = None
 ) -> OnchainBalance:
-    settings = await get_or_create_satspay_settings()
-    async with httpx.AsyncClient() as client:
+    # The address is interpolated into the mempool URL path, so validate it
+    # before it can become part of a request.
+    if not re.fullmatch(r"[A-Za-z0-9]{14,90}", onchain_address):
+        raise ValueError("Invalid onchain address.")
+    config = await get_or_create_satspay_settings()
+    async with SafeHttpClient(
+        private_endpoint=(
+            config.mempool_url if config.mempool_allow_private_ips else None
+        )
+    ) as client:
         res = await client.get(
-            f"{settings.mempool_url}/api/address/{onchain_address}/txs"
+            f"{config.mempool_url}/api/address/{onchain_address}/txs"
         )
         res.raise_for_status()
         data = res.json()
@@ -95,7 +117,7 @@ async def fetch_onchain_address(wallet_id: str, api_key: str) -> str:
         )
         r.raise_for_status()
         address_data = r.json()
-        if not address_data and "address" not in address_data:
+        if not address_data or "address" not in address_data:
             raise ValueError("Cannot fetch new address!")
         return address_data["address"]
 
