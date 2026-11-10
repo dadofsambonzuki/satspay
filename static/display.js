@@ -265,8 +265,13 @@ window.PageSatspayPublic = {
         )
         this.mempool_url = data.mempool_url || this.mempool_url
         this.charge = mapCharge(data)
+        // Open the method that is actually payable. A charge with no
+        // onchain address used to fall back to lightning even when only
+        // fiat was configured, leaving an empty panel and no pay button
+        // until the buyer clicked the fiat tab. Prefer lightning when it
+        // exists, otherwise fiat.
         if (!this.charge.onchainaddress) {
-          this.tab = 'ln'
+          this.tab = this.charge.payment_request ? 'ln' : 'fiat'
         }
         if (this.charge.custom_css) {
           document.body.setAttribute('id', 'custom-css')
