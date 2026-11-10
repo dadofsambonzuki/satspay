@@ -14,31 +14,58 @@ from .crud import (
     get_pending_charges,
     update_charge,
 )
-from .helpers import call_webhook, check_charge_balance, sum_transactions
+from .helpers import call_webhook, check_charge_balance, sum_transactions, tx_after
 from .models import Charge
 from .websocket_handler import ws_receive_queue, ws_send_queue
 
 tracked_addresses: list[str] = []
 public_ws_listeners: dict[str, list[WebSocket]] = {}
 
+# How often the on-chain balance is re-checked by REST as a fallback to the
+# mempool websocket. The websocket only tracks successfully while the number of
+# active addresses stays under mempool's per-connection limit, so this poll is
+# the reliable detection path.
+ONCHAIN_BALANCE_POLL_SECONDS = 120
+
 
 async def restart_address_tracking():
-    charges = await get_pending_charges()
-    for charge in charges:
-        if (
-            charge.onchainaddress
-            and charge.timestamp.timestamp() + charge.time * 60 > time.time()
-        ):
-            charge = await check_charge_balance(charge)
-            assert charge.onchainaddress
-            if charge.paid:
-                if not charge.settlement_method:
-                    charge.settlement_method = "onchain"
-                charge.add_extra({"payment_method": "onchain"})
-                await update_charge(charge)
-                logger.success(f"Charge {charge.id} marked as paid.")
-                continue
-            start_onchain_listener(charge.onchainaddress)
+    while settings.lnbits_running:
+        try:
+            charges = await get_pending_charges()
+        except Exception as exc:
+            logger.warning(f"Failed to load pending charges: {exc!s}")
+            await asyncio.sleep(ONCHAIN_BALANCE_POLL_SECONDS)
+            continue
+
+        logger.debug(
+            f"Onchain balance poll: {len(charges)} pending charges, "
+            f"{len(tracked_addresses)} tracked."
+        )
+
+        for charge in charges:
+            try:
+                if not charge.onchainaddress:
+                    continue
+                if charge.timestamp.timestamp() + charge.time * 60 <= time.time():
+                    # Expired: drop from ws tracking so stale addresses do not
+                    # consume mempool's per-connection address limit.
+                    stop_onchain_listener(charge.onchainaddress)
+                    continue
+                charge = await check_charge_balance(charge)
+                assert charge.onchainaddress
+                if charge.paid:
+                    if not charge.settlement_method:
+                        charge.settlement_method = "onchain"
+                    charge.add_extra({"payment_method": "onchain"})
+                    await update_charge(charge)
+                    stop_onchain_listener(charge.onchainaddress)
+                    logger.success(f"Charge {charge.id} marked as paid.")
+                    continue
+                start_onchain_listener(charge.onchainaddress)
+            except Exception as exc:
+                logger.warning(f"Error checking charge {charge.id}: {exc!s}")
+
+        await asyncio.sleep(ONCHAIN_BALANCE_POLL_SECONDS)
 
 
 async def wait_for_paid_invoices():
@@ -140,10 +167,16 @@ async def wait_for_onchain():
 async def _handle_ws_message(address: str, data: dict):
     charge = await get_charge_by_onchain_address(address)
     assert charge, f"Charge with address `{address}` does not exist."
-    unconfirmed_balance = sum_transactions(address, data.get("mempool", []))
-    confirmed_balance = sum_transactions(address, data.get("confirmed", []))
-    unconfirmed_txids = [tx["txid"] for tx in data.get("mempool", [])]
-    confirmed_txids = [tx["txid"] for tx in data.get("confirmed", [])]
+    # Only count money that arrived after this charge was created — the same
+    # rule as the REST poll in check_charge_balance, or a pre-existing balance
+    # settles the charge for free.
+    since_ts = charge.timestamp.timestamp()
+    mempool_txs = data.get("mempool", [])
+    confirmed_txs = [tx for tx in data.get("confirmed", []) if tx_after(tx, since_ts)]
+    unconfirmed_balance = sum_transactions(address, mempool_txs)
+    confirmed_balance = sum_transactions(address, confirmed_txs, since_ts)
+    unconfirmed_txids = [tx["txid"] for tx in mempool_txs]
+    confirmed_txids = [tx["txid"] for tx in confirmed_txs]
     charge.add_extra({"txids": confirmed_txids + unconfirmed_txids})
     if charge.zeroconf:
         confirmed_balance += unconfirmed_balance

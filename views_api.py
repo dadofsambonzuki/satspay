@@ -131,20 +131,34 @@ async def api_charges_retrieve(wallet: WalletTypeInfo = Depends(require_admin_ke
     return await get_charges(wallet.wallet.user)
 
 
-@satspay_api_router.get("/api/v1/charge/{charge_id}", dependencies=[Depends(require_invoice_key)])
-@satspay_api_router.get("/api/v1/charge/balance/{charge_id}", dependencies=[Depends(require_invoice_key)], deprecated=True)
-async def api_charge_retrieve(charge_id: str) -> Charge:
+async def _get_owned_charge(charge_id: str, user_id: str) -> Charge:
+    """Load a charge, but only for its owner.
+
+    404 rather than 403: charge ids travel in buyer-facing URLs, so answering
+    differently for "not yours" and "not there" would turn the endpoint into a
+    charge-id oracle.
+    """
     charge = await get_charge(charge_id)
-    if not charge:
-        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Charge does not exist.")
+    if not charge or charge.user != user_id:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND, detail="Charge does not exist."
+        )
     return charge
 
 
-@satspay_api_router.put("/api/v1/charge/balance/{charge_id}", dependencies=[Depends(require_admin_key)])
-async def api_charge_check_balance(charge_id: str) -> Charge:
-    charge = await get_charge(charge_id)
-    if not charge:
-        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Charge does not exist.")
+@satspay_api_router.get("/api/v1/charge/{charge_id}")
+@satspay_api_router.get("/api/v1/charge/balance/{charge_id}", deprecated=True)
+async def api_charge_retrieve(
+    charge_id: str, wallet: WalletTypeInfo = Depends(require_invoice_key)
+) -> Charge:
+    return await _get_owned_charge(charge_id, wallet.wallet.user)
+
+
+@satspay_api_router.put("/api/v1/charge/balance/{charge_id}")
+async def api_charge_check_balance(
+    charge_id: str, wallet: WalletTypeInfo = Depends(require_admin_key)
+) -> Charge:
+    charge = await _get_owned_charge(charge_id, wallet.wallet.user)
     if charge.paid:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail="Charge is already paid.")
     balance_before = charge.balance
@@ -155,11 +169,11 @@ async def api_charge_check_balance(charge_id: str) -> Charge:
     return charge
 
 
-@satspay_api_router.get("/api/v1/charge/webhook/{charge_id}", dependencies=[Depends(require_admin_key)])
-async def api_charge_webhook(charge_id: str) -> Charge:
-    charge = await get_charge(charge_id)
-    if not charge:
-        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Charge does not exist.")
+@satspay_api_router.get("/api/v1/charge/webhook/{charge_id}")
+async def api_charge_webhook(
+    charge_id: str, wallet: WalletTypeInfo = Depends(require_admin_key)
+) -> Charge:
+    charge = await _get_owned_charge(charge_id, wallet.wallet.user)
     if not charge.webhook:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail="No webhook set.")
     charge = await update_charge(charge)
@@ -169,11 +183,11 @@ async def api_charge_webhook(charge_id: str) -> Charge:
     return charge
 
 
-@satspay_api_router.delete("/api/v1/charge/{charge_id}", dependencies=[Depends(require_admin_key)])
-async def api_charge_delete(charge_id: str):
-    charge = await get_charge(charge_id)
-    if not charge:
-        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Charge does not exist.")
+@satspay_api_router.delete("/api/v1/charge/{charge_id}")
+async def api_charge_delete(
+    charge_id: str, wallet: WalletTypeInfo = Depends(require_admin_key)
+):
+    charge = await _get_owned_charge(charge_id, wallet.wallet.user)
     if charge.onchainaddress:
         stop_onchain_listener(charge.onchainaddress)
     await delete_charge(charge_id)

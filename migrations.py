@@ -334,3 +334,20 @@ async def m018_backfill_settlement(db: Database):
     if backfilled:
         logger.info(f"SatsPay: backfilled settlement info for {backfilled} charges.")
 
+
+
+async def m019_add_private_mempool_opt_in(db: Database):
+    """
+    Let an administrator opt the mempool endpoint into private destinations.
+
+    `fetch_onchain_balance` now goes through SafeHttpClient, which refuses
+    loopback/LAN/link-local and public self addresses unless the private
+    endpoint is explicitly allowed for the configured mempool origin.
+    """
+    try:
+        await db.execute(
+            "ALTER TABLE satspay.settings ADD COLUMN mempool_allow_private_ips "
+            "BOOLEAN NOT NULL DEFAULT FALSE"
+        )
+    except OperationalError:
+        pass
